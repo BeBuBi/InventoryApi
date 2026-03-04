@@ -1,0 +1,7 @@
+One-line build command going forward
+JAVA_HOME=/c/Users/pnguyen1/tools/jdk-17.0.10+7 /c/Users/pnguyen1/tools/gradle-8.7/bin/gradle build --no-daemon
+
+Note: The Gradle wrapper (./gradlew) still can't self-download Gradle 8.7 because the wrapper jar's SSL stack doesn't pick up the updated truststore. Use the extracted Gradle binary directly as shown above.
+
+cd "/c/Users/pnguyen1/OneDrive - Cox Communications/Claude/InventoryApi" && JAVA_HOME="/c/Users/pnguyen1/tools/jdk-17.0.10+7" ENCRYPTION_KEY="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" "/c/Users/pnguyen1/tools/gradle-8.7/bin/gradle" bootRun --no-daemon 2>&1 | head -80
+

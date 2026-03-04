@@ -1,0 +1,1331 @@
+openapi: 3.0.3
+
+info:
+  title: Server Inventory System API
+  description: |
+    REST API for the Server Inventory System.
+
+    Manages server asset inventory and provides access to VMware vSphere and
+    New Relic sync data. All endpoints require JWT authentication.
+
+    **Authentication:** Pass a JWT token in the `Authorization: Bearer <token>` header.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: https://inventory.example.com
+    description: Production
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Inventory
+    description: Core asset registry — create, read, update, delete assets
+  - name: vSphere
+    description: VMware vSphere VM records and sync control
+  - name: New Relic
+    description: New Relic agent records and sync control
+  - name: Credentials
+    description: Encrypted connection credentials for vSphere and New Relic
+  - name: Schedule
+    description: Sync schedule configuration per service
+
+# ==============================================================
+# PATHS
+# ==============================================================
+paths:
+
+  # ------------------------------------------------------------
+  # Inventory
+  # ------------------------------------------------------------
+  /api/inventory:
+    get:
+      tags: [Inventory]
+      summary: List assets
+      description: |
+        Returns a paginated list of all inventory assets with their associated
+        vSphere and New Relic data. Supports filtering by multiple criteria.
+      operationId: listInventory
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - name: hostname
+          in: query
+          description: Partial hostname match (case-insensitive)
+          schema:
+            type: string
+          example: web-prod
+        - name: environment
+          in: query
+          description: Filter by environment
+          schema:
+            type: string
+            enum: [production, staging, dev, dr]
+        - name: status
+          in: query
+          description: Filter by status
+          schema:
+            type: string
+            enum: [active, maintenance, decommissioned, unknown]
+        - name: asset_type
+          in: query
+          description: Filter by asset type
+          schema:
+            type: string
+            enum: [server, vm, container, network]
+        - name: cluster
+          in: query
+          description: Filter by vSphere cluster name
+          schema:
+            type: string
+        - name: datacenter
+          in: query
+          description: Filter by vSphere datacenter name
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated list of assets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetDetailPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags: [Inventory]
+      summary: Create an asset
+      operationId: createInventory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInventoryRequest'
+            example:
+              hostname: web-prod-01
+              ip_address: 10.0.1.50
+              asset_type: vm
+              environment: production
+              owner: platform-team
+              location: dc1-rack-12
+      responses:
+        '201':
+          description: Asset created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/inventory/{hostname}:
+    parameters:
+      - $ref: '#/components/parameters/HostnameParam'
+
+    get:
+      tags: [Inventory]
+      summary: Get asset detail
+      description: |
+        Returns full detail for one asset — the inventory record plus its
+        associated vSphere and New Relic data. The `vsphere` and `newrelic`
+        fields are `null` if no sync record exists for this hostname.
+      operationId: getInventoryByHostname
+      responses:
+        '200':
+          description: Asset detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags: [Inventory]
+      summary: Update an asset
+      operationId: updateInventory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInventoryRequest'
+      responses:
+        '200':
+          description: Asset updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags: [Inventory]
+      summary: Delete an asset
+      operationId: deleteInventory
+      responses:
+        '204':
+          description: Asset deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ------------------------------------------------------------
+  # vSphere
+  # ------------------------------------------------------------
+  /api/vsphere:
+    get:
+      tags: [vSphere]
+      summary: List vSphere records
+      operationId: listVsphere
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Paginated list of vSphere records
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VsphereRecordPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/vsphere/sync:
+    post:
+      tags: [vSphere]
+      summary: Trigger manual vSphere sync
+      description: Immediately starts a vSphere sync job, ignoring the configured schedule.
+      operationId: triggerVsphereSync
+      responses:
+        '202':
+          description: Sync job accepted and started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncAccepted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: A sync job is already running
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/vsphere/sync/status:
+    get:
+      tags: [vSphere]
+      summary: Get vSphere sync status
+      description: Returns the status and result of the most recent vSphere sync run.
+      operationId: getVsphereSyncStatus
+      responses:
+        '200':
+          description: vSphere sync status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/vsphere/{hostname}:
+    parameters:
+      - $ref: '#/components/parameters/HostnameParam'
+
+    get:
+      tags: [vSphere]
+      summary: Get vSphere record by hostname
+      operationId: getVsphereByHostname
+      responses:
+        '200':
+          description: vSphere record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VsphereRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ------------------------------------------------------------
+  # New Relic
+  # ------------------------------------------------------------
+  /api/newrelic:
+    get:
+      tags: [New Relic]
+      summary: List New Relic records
+      operationId: listNewRelic
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Paginated list of New Relic records
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NewRelicRecordPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/newrelic/sync:
+    post:
+      tags: [New Relic]
+      summary: Trigger manual New Relic sync
+      description: Immediately starts a New Relic sync job, ignoring the configured schedule.
+      operationId: triggerNewRelicSync
+      responses:
+        '202':
+          description: Sync job accepted and started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncAccepted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: A sync job is already running
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/newrelic/sync/status:
+    get:
+      tags: [New Relic]
+      summary: Get New Relic sync status
+      description: Returns the status and result of the most recent New Relic sync run.
+      operationId: getNewRelicSyncStatus
+      responses:
+        '200':
+          description: New Relic sync status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/newrelic/{hostname}:
+    parameters:
+      - $ref: '#/components/parameters/HostnameParam'
+
+    get:
+      tags: [New Relic]
+      summary: Get New Relic record by hostname
+      operationId: getNewRelicByHostname
+      responses:
+        '200':
+          description: New Relic record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NewRelicRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ------------------------------------------------------------
+  # Credentials
+  # ------------------------------------------------------------
+  /api/credentials:
+    get:
+      tags: [Credentials]
+      summary: List all credentials
+      description: Returns all credential entries. Passwords and API keys are masked in the response.
+      operationId: listCredentials
+      responses:
+        '200':
+          description: List of credentials
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CredentialRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags: [Credentials]
+      summary: Create a credential
+      description: Stores a new credential entry. The `config` is encrypted before storage.
+      operationId: createCredential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCredentialRequest'
+            examples:
+              vsphere:
+                summary: vSphere credential
+                value:
+                  service: vsphere
+                  name: Production vCenter
+                  config:
+                    host: vcenter.corp.example.com
+                    username: admin@vsphere.local
+                    password: secret
+              newrelic:
+                summary: New Relic credential
+                value:
+                  service: newrelic
+                  name: Production Account
+                  config:
+                    apiKey: NRAK-xxxxxxxxxxxx
+                    accountId: "12345"
+      responses:
+        '201':
+          description: Credential created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/credentials/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+
+    get:
+      tags: [Credentials]
+      summary: Get credential by ID
+      description: Returns a single credential. Passwords and API keys are masked.
+      operationId: getCredentialById
+      responses:
+        '200':
+          description: Credential record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags: [Credentials]
+      summary: Update a credential
+      operationId: updateCredential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCredentialRequest'
+      responses:
+        '200':
+          description: Credential updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags: [Credentials]
+      summary: Delete a credential
+      operationId: deleteCredential
+      responses:
+        '204':
+          description: Credential deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/credentials/{id}/enable:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    patch:
+      tags: [Credentials]
+      summary: Enable a credential
+      operationId: enableCredential
+      responses:
+        '200':
+          description: Credential enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/credentials/{id}/disable:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    patch:
+      tags: [Credentials]
+      summary: Disable a credential
+      operationId: disableCredential
+      responses:
+        '200':
+          description: Credential disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ------------------------------------------------------------
+  # Sync Schedule
+  # ------------------------------------------------------------
+  /api/schedule:
+    get:
+      tags: [Schedule]
+      summary: List all sync schedules
+      operationId: listSchedules
+      responses:
+        '200':
+          description: List of sync schedules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SyncScheduleRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/schedule/{service}:
+    parameters:
+      - $ref: '#/components/parameters/ServiceParam'
+
+    get:
+      tags: [Schedule]
+      summary: Get schedule for a service
+      operationId: getScheduleByService
+      responses:
+        '200':
+          description: Sync schedule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncScheduleRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags: [Schedule]
+      summary: Save or update schedule for a service
+      operationId: updateSchedule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateScheduleRequest'
+            example:
+              cron_expr: "0 0 2 * * *"
+              enabled: true
+              description: Every day at 2:00 AM
+      responses:
+        '200':
+          description: Schedule updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncScheduleRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/schedule/{service}/enable:
+    parameters:
+      - $ref: '#/components/parameters/ServiceParam'
+    patch:
+      tags: [Schedule]
+      summary: Enable a sync schedule
+      operationId: enableSchedule
+      responses:
+        '200':
+          description: Schedule enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncScheduleRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/schedule/{service}/disable:
+    parameters:
+      - $ref: '#/components/parameters/ServiceParam'
+    patch:
+      tags: [Schedule]
+      summary: Pause a sync schedule
+      operationId: disableSchedule
+      responses:
+        '200':
+          description: Schedule paused
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncScheduleRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+
+# ==============================================================
+# COMPONENTS
+# ==============================================================
+components:
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  # ------------------------------------------------------------
+  # Parameters
+  # ------------------------------------------------------------
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      description: Zero-based page number
+      schema:
+        type: integer
+        default: 0
+        minimum: 0
+      example: 0
+
+    SizeParam:
+      name: size
+      in: query
+      description: Number of items per page
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+      example: 20
+
+    HostnameParam:
+      name: hostname
+      in: path
+      required: true
+      description: Asset hostname (primary key)
+      schema:
+        type: string
+      example: web-prod-01
+
+    IdParam:
+      name: id
+      in: path
+      required: true
+      description: Credential ID
+      schema:
+        type: integer
+        minimum: 1
+      example: 1
+
+    ServiceParam:
+      name: service
+      in: path
+      required: true
+      description: Service name
+      schema:
+        type: string
+        enum: [vsphere, newrelic]
+      example: vsphere
+
+  # ------------------------------------------------------------
+  # Schemas
+  # ------------------------------------------------------------
+  schemas:
+
+    # -- Inventory --
+    InventoryRecord:
+      type: object
+      properties:
+        hostname:
+          type: string
+          example: web-prod-01
+        ip_address:
+          type: string
+          example: 10.0.1.50
+        asset_type:
+          type: string
+          enum: [server, vm, container, network]
+          example: vm
+        environment:
+          type: string
+          enum: [production, staging, dev, dr]
+          example: production
+        owner:
+          type: string
+          nullable: true
+          example: platform-team
+        location:
+          type: string
+          nullable: true
+          example: dc1-rack-12
+        status:
+          type: string
+          enum: [active, maintenance, decommissioned, unknown]
+          example: active
+        warranty_expiry:
+          type: string
+          format: date
+          nullable: true
+          example: "2027-06-30"
+        last_patched_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-01-15T02:00:00Z"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-02-01T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-03-01T08:30:00Z"
+
+    CreateInventoryRequest:
+      type: object
+      required: [hostname, ip_address, asset_type, environment]
+      properties:
+        hostname:
+          type: string
+          example: web-prod-01
+        ip_address:
+          type: string
+          example: 10.0.1.50
+        asset_type:
+          type: string
+          enum: [server, vm, container, network]
+          example: vm
+        environment:
+          type: string
+          enum: [production, staging, dev, dr]
+          example: production
+        owner:
+          type: string
+          example: platform-team
+        location:
+          type: string
+          example: dc1-rack-12
+        status:
+          type: string
+          enum: [active, maintenance, decommissioned, unknown]
+          default: active
+        warranty_expiry:
+          type: string
+          format: date
+          example: "2027-06-30"
+        last_patched_at:
+          type: string
+          format: date-time
+          example: "2026-01-15T02:00:00Z"
+
+    UpdateInventoryRequest:
+      type: object
+      properties:
+        ip_address:
+          type: string
+          example: 10.0.1.51
+        asset_type:
+          type: string
+          enum: [server, vm, container, network]
+        environment:
+          type: string
+          enum: [production, staging, dev, dr]
+        owner:
+          type: string
+        location:
+          type: string
+        status:
+          type: string
+          enum: [active, maintenance, decommissioned, unknown]
+        warranty_expiry:
+          type: string
+          format: date
+        last_patched_at:
+          type: string
+          format: date-time
+
+    # -- vSphere --
+    VsphereRecord:
+      type: object
+      properties:
+        hostname:
+          type: string
+          example: web-prod-01
+        fqdn:
+          type: string
+          nullable: true
+          example: web-prod-01.corp.example.com
+        vm_name:
+          type: string
+          example: web-prod-01
+        vm_id:
+          type: string
+          description: vSphere managed object ID (moId)
+          example: vm-1042
+        cluster:
+          type: string
+          nullable: true
+          example: prod-cluster-01
+        datacenter:
+          type: string
+          nullable: true
+          example: DC1
+        datastore:
+          type: string
+          nullable: true
+          example: ds-ssd-01
+        cpu_count:
+          type: integer
+          nullable: true
+          example: 4
+        cpu_cores:
+          type: integer
+          nullable: true
+          example: 2
+        memory_mb:
+          type: integer
+          nullable: true
+          example: 8192
+        memory_gb:
+          type: integer
+          nullable: true
+          example: 8
+        disk_gb:
+          type: integer
+          nullable: true
+          example: 100
+        power_state:
+          type: string
+          enum: [poweredOn, poweredOff, suspended]
+          nullable: true
+          example: poweredOn
+        guest_os:
+          type: string
+          nullable: true
+          example: "Ubuntu Linux (64-bit)"
+        tools_status:
+          type: string
+          enum: [toolsOk, toolsOld, toolsNotRunning, toolsNotInstalled]
+          nullable: true
+          example: toolsOk
+        ipv4_address:
+          type: string
+          nullable: true
+          example: 10.0.1.50
+        ipv6_address:
+          type: string
+          nullable: true
+          example: null
+        last_synced_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-03-01T02:05:00Z"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-02-01T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-03-01T02:05:00Z"
+
+    # -- New Relic --
+    NewRelicRecord:
+      type: object
+      properties:
+        hostname:
+          type: string
+          example: web-prod-01
+        fqdn:
+          type: string
+          nullable: true
+          example: web-prod-01.corp.example.com
+        ipv4_address:
+          type: string
+          nullable: true
+          example: 10.0.1.50
+        ipv6_address:
+          type: string
+          nullable: true
+          example: null
+        cpu_count:
+          type: integer
+          nullable: true
+          example: 4
+        cpu_cores:
+          type: integer
+          nullable: true
+          example: 2
+        memory_gb:
+          type: integer
+          nullable: true
+          example: 8
+        guest_os:
+          type: string
+          nullable: true
+          example: "Ubuntu 22.04"
+        application:
+          type: string
+          nullable: true
+          example: billing-service
+        environment:
+          type: string
+          nullable: true
+          example: production
+        tags:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: string
+          description: Key-value tags from New Relic
+          example:
+            team: platform
+            tier: backend
+        last_reported_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-03-02T06:10:00Z"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-02-01T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-03-02T06:10:00Z"
+
+    # -- Asset Detail (combined) --
+    AssetDetail:
+      type: object
+      properties:
+        inventory:
+          $ref: '#/components/schemas/InventoryRecord'
+        vsphere:
+          allOf:
+            - $ref: '#/components/schemas/VsphereRecord'
+          nullable: true
+          description: null if no vSphere record has been synced for this hostname
+        newrelic:
+          allOf:
+            - $ref: '#/components/schemas/NewRelicRecord'
+          nullable: true
+          description: null if no New Relic record has been synced for this hostname
+
+    # -- Paginated responses --
+    AssetDetailPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssetDetail'
+        page:
+          type: integer
+          example: 0
+        size:
+          type: integer
+          example: 20
+        total_elements:
+          type: integer
+          example: 142
+        total_pages:
+          type: integer
+          example: 8
+
+    VsphereRecordPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/VsphereRecord'
+        page:
+          type: integer
+          example: 0
+        size:
+          type: integer
+          example: 20
+        total_elements:
+          type: integer
+          example: 95
+        total_pages:
+          type: integer
+          example: 5
+
+    NewRelicRecordPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/NewRelicRecord'
+        page:
+          type: integer
+          example: 0
+        size:
+          type: integer
+          example: 20
+        total_elements:
+          type: integer
+          example: 88
+        total_pages:
+          type: integer
+          example: 5
+
+    # -- Credentials --
+    CredentialRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        service:
+          type: string
+          enum: [vsphere, newrelic]
+          example: vsphere
+        name:
+          type: string
+          example: Production vCenter
+        config:
+          description: Sensitive fields are masked — passwords and API keys are never returned in plain text.
+          oneOf:
+            - $ref: '#/components/schemas/VsphereConfigMasked'
+            - $ref: '#/components/schemas/NewRelicConfigMasked'
+        enabled:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-02-01T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-02-01T10:00:00Z"
+
+    VsphereConfigMasked:
+      type: object
+      properties:
+        host:
+          type: string
+          example: vcenter.corp.example.com
+        username:
+          type: string
+          example: admin@vsphere.local
+        password:
+          type: string
+          description: Always masked in responses
+          example: "********"
+
+    NewRelicConfigMasked:
+      type: object
+      properties:
+        apiKey:
+          type: string
+          description: Always masked in responses
+          example: "NRAK-****"
+        accountId:
+          type: string
+          example: "12345"
+
+    CreateCredentialRequest:
+      type: object
+      required: [service, name, config]
+      properties:
+        service:
+          type: string
+          enum: [vsphere, newrelic]
+          example: vsphere
+        name:
+          type: string
+          example: Production vCenter
+        config:
+          description: Plain-text config — encrypted with AES-256 before storage.
+          oneOf:
+            - $ref: '#/components/schemas/VsphereConfig'
+            - $ref: '#/components/schemas/NewRelicConfig'
+
+    UpdateCredentialRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          example: Production vCenter
+        config:
+          oneOf:
+            - $ref: '#/components/schemas/VsphereConfig'
+            - $ref: '#/components/schemas/NewRelicConfig'
+
+    VsphereConfig:
+      type: object
+      required: [host, username, password]
+      properties:
+        host:
+          type: string
+          example: vcenter.corp.example.com
+        username:
+          type: string
+          example: admin@vsphere.local
+        password:
+          type: string
+          example: secret
+
+    NewRelicConfig:
+      type: object
+      required: [apiKey, accountId]
+      properties:
+        apiKey:
+          type: string
+          example: NRAK-xxxxxxxxxxxx
+        accountId:
+          type: string
+          example: "12345"
+
+    # -- Sync Schedule --
+    SyncScheduleRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        service:
+          type: string
+          enum: [vsphere, newrelic]
+          example: vsphere
+        cron_expr:
+          type: string
+          description: "6-field cron: seconds minutes hours day-of-month month day-of-week"
+          example: "0 0 2 * * *"
+        enabled:
+          type: boolean
+          example: true
+        description:
+          type: string
+          nullable: true
+          example: Every day at 2:00 AM
+        last_run_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-03-02T02:00:05Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-02-01T10:00:00Z"
+
+    UpdateScheduleRequest:
+      type: object
+      required: [cron_expr]
+      properties:
+        cron_expr:
+          type: string
+          description: "6-field cron: seconds minutes hours day-of-month month day-of-week"
+          example: "0 0 2 * * *"
+        enabled:
+          type: boolean
+          example: true
+        description:
+          type: string
+          example: Every day at 2:00 AM
+
+    # -- Sync status --
+    SyncStatus:
+      type: object
+      properties:
+        service:
+          type: string
+          enum: [vsphere, newrelic]
+          example: vsphere
+        status:
+          type: string
+          enum: [idle, running, success, failed]
+          example: success
+        last_run_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-03-02T02:05:00Z"
+        records_synced:
+          type: integer
+          nullable: true
+          example: 87
+        message:
+          type: string
+          nullable: true
+          description: Error detail when status is `failed`
+          example: null
+
+    SyncAccepted:
+      type: object
+      properties:
+        service:
+          type: string
+          enum: [vsphere, newrelic]
+          example: vsphere
+        message:
+          type: string
+          example: Sync job started
+
+    # -- Error --
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 404
+        error:
+          type: string
+          example: Not Found
+        message:
+          type: string
+          example: "Asset 'web-prod-01' not found"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-03-02T10:00:00Z"
+        path:
+          type: string
+          example: /api/inventory/web-prod-01
+
+  # ------------------------------------------------------------
+  # Reusable responses
+  # ------------------------------------------------------------
+  responses:
+    BadRequest:
+      description: Invalid request parameters or body
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Unauthorized:
+      description: Missing or invalid JWT token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Conflict:
+      description: Resource already exists (duplicate hostname or credential name)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    InternalServerError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

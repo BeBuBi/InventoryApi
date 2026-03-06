@@ -29,16 +29,32 @@ import { Credential, CredentialRequest } from '../../../core/models/credential.m
       <!-- Add new form -->
       <div class="bg-white rounded-lg shadow p-4 mb-6">
         <h2 class="text-sm font-semibold text-gray-700 mb-3">Add Credential</h2>
-        <div class="flex flex-wrap gap-3">
+        <div class="flex gap-3 mb-3">
           <input [(ngModel)]="newName" placeholder="Name (e.g. Production vCenter)"
                  class="border border-gray-300 rounded px-3 py-2 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          <textarea [(ngModel)]="newConfig" placeholder='JSON config (e.g. {"host":"...","username":"...","password":"..."})'
-                    class="border border-gray-300 rounded px-3 py-2 text-sm flex-1 min-w-64 h-20 focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
-          <button (click)="addCredential()"
-                  class="px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700">
-            Add
-          </button>
+
+          <!-- vSphere fields -->
+          <div *ngIf="activeService === 'vsphere'" class="flex flex-col gap-2 flex-1">
+            <input [(ngModel)]="vsHost" placeholder="Host (e.g. vcenter.example.com)"
+                   class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input [(ngModel)]="vsUsername" placeholder="Username"
+                   class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input [(ngModel)]="vsPassword" type="password" placeholder="Password"
+                   class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+
+          <!-- New Relic fields -->
+          <div *ngIf="activeService === 'newrelic'" class="flex flex-col gap-2 flex-1">
+            <input [(ngModel)]="nrApiKey" placeholder="API Key (e.g. NRAK-...)"
+                   class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input [(ngModel)]="nrAccountId" placeholder="Account ID"
+                   class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
         </div>
+        <button (click)="addCredential()"
+                class="px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700">
+          Add
+        </button>
         <p *ngIf="errorMsg" class="text-red-600 text-xs mt-2">{{ errorMsg }}</p>
       </div>
 
@@ -87,8 +103,16 @@ export class CredentialsComponent implements OnInit {
   credentials: Credential[] = [];
   activeService: 'vsphere' | 'newrelic' = 'vsphere';
   newName = '';
-  newConfig = '';
   errorMsg = '';
+
+  // vSphere fields
+  vsHost = '';
+  vsUsername = '';
+  vsPassword = '';
+
+  // New Relic fields
+  nrApiKey = '';
+  nrAccountId = '';
 
   ngOnInit(): void {
     this.loadCredentials();
@@ -96,7 +120,28 @@ export class CredentialsComponent implements OnInit {
 
   selectService(service: 'vsphere' | 'newrelic'): void {
     this.activeService = service;
+    this.clearForm();
     this.loadCredentials();
+  }
+
+  private clearForm(): void {
+    this.newName = '';
+    this.vsHost = ''; this.vsUsername = ''; this.vsPassword = '';
+    this.nrApiKey = ''; this.nrAccountId = '';
+    this.errorMsg = '';
+  }
+
+  private buildConfig(): string {
+    if (this.activeService === 'vsphere') {
+      return JSON.stringify({ host: this.vsHost.trim(), username: this.vsUsername.trim(), password: this.vsPassword });
+    }
+    return JSON.stringify({ apiKey: this.nrApiKey.trim(), accountId: this.nrAccountId.trim() });
+  }
+
+  private isFormValid(): boolean {
+    if (!this.newName.trim()) return false;
+    if (this.activeService === 'vsphere') return !!(this.vsHost.trim() && this.vsUsername.trim() && this.vsPassword);
+    return !!(this.nrApiKey.trim() && this.nrAccountId.trim());
   }
 
   loadCredentials(): void {
@@ -106,17 +151,17 @@ export class CredentialsComponent implements OnInit {
 
   addCredential(): void {
     this.errorMsg = '';
-    if (!this.newName.trim() || !this.newConfig.trim()) {
-      this.errorMsg = 'Name and config are required.';
+    if (!this.isFormValid()) {
+      this.errorMsg = 'All fields are required.';
       return;
     }
     const req: CredentialRequest = {
       service: this.activeService,
       name: this.newName.trim(),
-      config: this.newConfig.trim()
+      config: this.buildConfig()
     };
     this.credentialService.create(req).subscribe({
-      next: () => { this.newName = ''; this.newConfig = ''; this.loadCredentials(); },
+      next: () => { this.clearForm(); this.loadCredentials(); },
       error: (e) => { this.errorMsg = e?.error?.message ?? 'Failed to save credential.'; }
     });
   }

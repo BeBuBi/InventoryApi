@@ -79,7 +79,18 @@ import { SyncStatus } from '../../core/models/sync-schedule.model';
 
         <!-- Pagination -->
         <div class="px-4 py-3 border-t border-gray-200 flex items-center justify-between text-sm text-gray-600">
-          <span>{{ totalElements }} records</span>
+          <div class="flex items-center gap-2">
+            <span class="text-gray-500">Rows:</span>
+            <select [(ngModel)]="pageSize" (ngModelChange)="onPageSizeChange()"
+                    class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none">
+              <option [value]="20">20</option>
+              <option [value]="50">50</option>
+              <option [value]="100">100</option>
+              <option [value]="200">200</option>
+            </select>
+            <span class="text-gray-400">&middot;</span>
+            <span>{{ totalElements }} records</span>
+          </div>
           <div class="flex gap-2">
             <button (click)="prevPage()" [disabled]="currentPage === 0"
                     class="px-3 py-1 border rounded disabled:opacity-40 hover:bg-gray-50">Prev</button>
@@ -100,6 +111,7 @@ export class VsphereListComponent implements OnInit {
   totalElements = 0;
   totalPages = 0;
   currentPage = 0;
+  pageSize = 20;
   search = '';
   filterCluster = '';
   filterPowerState = '';
@@ -111,10 +123,12 @@ export class VsphereListComponent implements OnInit {
 
   onFilter(): void { this.currentPage = 0; this.load(); }
 
+  onPageSizeChange(): void { this.currentPage = 0; this.load(); }
+
   load(): void {
     this.vsphereService.list({
       search: this.search, cluster: this.filterCluster,
-      powerState: this.filterPowerState, page: this.currentPage, size: 20
+      powerState: this.filterPowerState, page: this.currentPage, size: this.pageSize
     }).subscribe(res => {
       this.items = res.content;
       this.totalElements = res.totalElements;

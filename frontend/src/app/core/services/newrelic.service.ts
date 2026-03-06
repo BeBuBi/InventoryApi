@@ -15,6 +15,7 @@ export class NewRelicService {
     search?: string;
     application?: string;
     environment?: string;
+    accountId?: string;
     page?: number;
     size?: number;
   }): Observable<PagedResponse<NewRelicRecord>> {
@@ -22,6 +23,7 @@ export class NewRelicService {
     if (params.search) p = p.set('search', params.search);
     if (params.application) p = p.set('application', params.application);
     if (params.environment) p = p.set('environment', params.environment);
+    if (params.accountId) p = p.set('accountId', params.accountId);
     p = p.set('page', params.page ?? 0);
     p = p.set('size', params.size ?? 20);
     return this.http.get<PagedResponse<NewRelicRecord>>(this.base, { params: p });
@@ -29,6 +31,10 @@ export class NewRelicService {
 
   getEnvironments(): Observable<string[]> {
     return this.http.get<string[]>(`${this.base}/environments`);
+  }
+
+  getAccountIds(): Observable<string[]> {
+    return this.http.get<string[]>(`${this.base}/accounts`);
   }
 
   getByHostname(hostname: string): Observable<NewRelicRecord> {

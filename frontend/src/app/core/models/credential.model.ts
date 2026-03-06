@@ -5,6 +5,7 @@ export interface Credential {
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
+  config?: Record<string, string>;
 }
 
 export interface CredentialRequest {

@@ -45,9 +45,9 @@ import { Credential, CredentialRequest } from '../../../core/models/credential.m
 
           <!-- New Relic fields -->
           <div *ngIf="activeService === 'newrelic'" class="flex flex-col gap-2 flex-1">
-            <input [(ngModel)]="nrApiKey" placeholder="API Key (e.g. NRAK-...)"
+            <input [(ngModel)]="nrAccountId" placeholder="Account ID (e.g. 1234567)"
                    class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            <input [(ngModel)]="nrAccountId" placeholder="Account ID"
+            <input [(ngModel)]="nrApiKey" placeholder="API Key (e.g. NRAK-...)"
                    class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
         </div>
@@ -64,6 +64,7 @@ import { Credential, CredentialRequest } from '../../../core/models/credential.m
           <thead class="bg-gray-50">
             <tr>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Details</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -71,7 +72,15 @@ import { Credential, CredentialRequest } from '../../../core/models/credential.m
           </thead>
           <tbody class="divide-y divide-gray-100">
             <tr *ngFor="let cred of credentials" class="hover:bg-gray-50">
-              <td class="px-4 py-3 font-medium">{{ cred.name }}</td>
+              <td class="px-4 py-3 font-medium text-gray-900">{{ cred.name }}</td>
+              <td class="px-4 py-3 text-xs text-gray-600">
+                <span *ngIf="activeService === 'newrelic'">
+                  <span class="text-gray-400">Account ID:</span> {{ cred.config?.['accountId'] || '—' }}
+                </span>
+                <span *ngIf="activeService === 'vsphere'">
+                  <span class="text-gray-400">Host:</span> {{ cred.config?.['host'] || '—' }}
+                </span>
+              </td>
               <td class="px-4 py-3">
                 <span [class]="cred.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'"
                       class="px-2 py-0.5 rounded text-xs font-medium">
@@ -89,7 +98,7 @@ import { Credential, CredentialRequest } from '../../../core/models/credential.m
               </td>
             </tr>
             <tr *ngIf="credentials.length === 0">
-              <td colspan="4" class="px-4 py-8 text-center text-gray-400">No credentials configured</td>
+              <td colspan="5" class="px-4 py-8 text-center text-gray-400">No credentials configured</td>
             </tr>
           </tbody>
         </table>

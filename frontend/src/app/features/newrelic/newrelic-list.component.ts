@@ -28,6 +28,11 @@ import { SyncStatus } from '../../core/models/sync-schedule.model';
       <div class="bg-white rounded-lg shadow p-4 mb-4 flex flex-wrap items-center gap-3">
         <input [(ngModel)]="search" (ngModelChange)="onFilter()" placeholder="Search hostname..."
                class="border border-gray-300 rounded px-3 py-2 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <select [(ngModel)]="filterAccountId" (ngModelChange)="onFilter()"
+                class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none">
+          <option value="">All Accounts</option>
+          <option *ngFor="let id of accountIds" [value]="id">{{ id }}</option>
+        </select>
         <select [(ngModel)]="filterEnv" (ngModelChange)="onFilter()"
                 class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none">
           <option value="">All Environments</option>
@@ -176,6 +181,7 @@ export class NewRelicListComponent implements OnInit {
 
   items: NewRelicRecord[] = [];
   environments: string[] = [];
+  accountIds: string[] = [];
   syncStatus?: SyncStatus;
   totalElements = 0;
   totalPages = 0;
@@ -183,6 +189,7 @@ export class NewRelicListComponent implements OnInit {
   pageSize = 20;
   search = '';
   filterEnv = '';
+  filterAccountId = '';
 
   // Column visibility state — hostname is always visible and not tracked here
   cols: Record<string, boolean> = {
@@ -246,6 +253,7 @@ export class NewRelicListComponent implements OnInit {
     this.load();
     this.loadSyncStatus();
     this.newRelicService.getEnvironments().subscribe(envs => this.environments = envs);
+    this.newRelicService.getAccountIds().subscribe(ids => this.accountIds = ids);
   }
 
   onFilter(): void { this.currentPage = 0; this.load(); }
@@ -256,6 +264,7 @@ export class NewRelicListComponent implements OnInit {
     this.newRelicService.list({
       search: this.search,
       environment: this.filterEnv,
+      accountId: this.filterAccountId,
       page: this.currentPage,
       size: this.pageSize
     }).subscribe(res => {

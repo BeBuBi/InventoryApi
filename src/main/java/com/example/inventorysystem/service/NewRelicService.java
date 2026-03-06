@@ -16,16 +16,20 @@ public class NewRelicService {
     private final NewRelicRepository newRelicRepository;
 
     public PagedResponse<NewRelicResponse> list(
-            String search, String service, String environment, int page, int size) {
+            String search, String service, String environment, String accountId, int page, int size) {
 
         var pageable = PageRequest.of(page, size, Sort.by("hostname").ascending());
         var results = newRelicRepository.findAllFiltered(
-                nullIfBlank(search), nullIfBlank(service), nullIfBlank(environment), pageable);
+                nullIfBlank(search), nullIfBlank(service), nullIfBlank(environment), nullIfBlank(accountId), pageable);
         return new PagedResponse<>(results.map(NewRelicResponse::new));
     }
 
     public java.util.List<String> listEnvironments() {
         return newRelicRepository.findDistinctEnvironments();
+    }
+
+    public java.util.List<String> listAccountIds() {
+        return newRelicRepository.findDistinctAccountIds();
     }
 
     public NewRelicResponse getByHostname(String hostname) {

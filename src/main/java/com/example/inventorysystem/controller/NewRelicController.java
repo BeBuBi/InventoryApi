@@ -26,14 +26,20 @@ public class NewRelicController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String service,
             @RequestParam(required = false) String environment,
+            @RequestParam(required = false) String accountId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return newRelicService.list(search, service, environment, page, size);
+        return newRelicService.list(search, service, environment, accountId, page, size);
     }
 
     @GetMapping("/environments")
     public java.util.List<String> listEnvironments() {
         return newRelicService.listEnvironments();
+    }
+
+    @GetMapping("/accounts")
+    public java.util.List<String> listAccountIds() {
+        return newRelicService.listAccountIds();
     }
 
     @GetMapping("/{hostname}")

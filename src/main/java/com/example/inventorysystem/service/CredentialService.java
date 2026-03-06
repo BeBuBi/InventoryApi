@@ -22,12 +22,13 @@ public class CredentialService {
     public List<CredentialResponse> listByService(String service) {
         return credentialRepository.findByService(service)
                 .stream()
-                .map(CredentialResponse::new)
+                .map(c -> new CredentialResponse(c, encryptionService.decrypt(c.getConfig())))
                 .toList();
     }
 
     public CredentialResponse getById(Long id) {
-        return new CredentialResponse(findOrThrow(id));
+        Credential c = findOrThrow(id);
+        return new CredentialResponse(c, encryptionService.decrypt(c.getConfig()));
     }
 
     @Transactional
@@ -41,7 +42,8 @@ public class CredentialService {
         c.setName(req.getName());
         c.setConfig(encryptionService.encrypt(req.getConfig()));
         c.setEnabled(true);
-        return new CredentialResponse(credentialRepository.save(c));
+        Credential saved = credentialRepository.save(c);
+        return new CredentialResponse(saved, req.getConfig());
     }
 
     @Transactional
@@ -50,14 +52,14 @@ public class CredentialService {
         c.setService(req.getService());
         c.setName(req.getName());
         c.setConfig(encryptionService.encrypt(req.getConfig()));
-        return new CredentialResponse(credentialRepository.save(c));
+        return new CredentialResponse(credentialRepository.save(c), req.getConfig());
     }
 
     @Transactional
     public CredentialResponse setEnabled(Long id, boolean enabled) {
         Credential c = findOrThrow(id);
         c.setEnabled(enabled);
-        return new CredentialResponse(credentialRepository.save(c));
+        return new CredentialResponse(credentialRepository.save(c), encryptionService.decrypt(c.getConfig()));
     }
 
     @Transactional

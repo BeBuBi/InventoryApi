@@ -50,6 +50,9 @@ public class NewRelic {
     @Column(name = "location")
     private String location;
 
+    @Column(name = "account_id")
+    private String accountId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private String createdAt;
 

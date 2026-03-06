@@ -31,6 +31,11 @@ public class NewRelicController {
         return newRelicService.list(search, service, environment, page, size);
     }
 
+    @GetMapping("/environments")
+    public java.util.List<String> listEnvironments() {
+        return newRelicService.listEnvironments();
+    }
+
     @GetMapping("/{hostname}")
     public NewRelicResponse getByHostname(@PathVariable String hostname) {
         return newRelicService.getByHostname(hostname);

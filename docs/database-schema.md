@@ -1,8 +1,8 @@
 # Database Schema
 ## Server Inventory System
 
-**Version:** 1.0
-**Last Updated:** 2026-03-02
+**Version:** 1.1
+**Last Updated:** 2026-03-06
 **Database:** SQLite 3.x
 **Migration Tool:** Flyway
 
@@ -179,6 +179,7 @@ CREATE TABLE newrelic (
     environment           TEXT,
     team                  TEXT,
     location              TEXT,
+    account_id            TEXT,
     created_at            TEXT    NOT NULL,
     updated_at            TEXT    NOT NULL,
     PRIMARY KEY (hostname)
@@ -199,6 +200,7 @@ CREATE TABLE newrelic (
 | `environment` | TEXT | YES | — | Environment custom attribute (`environment` in NR) |
 | `team` | TEXT | YES | — | Team custom attribute (`team` in NR) |
 | `location` | TEXT | YES | — | Location custom attribute (`location` in NR) |
+| `account_id` | TEXT | YES | — | New Relic account ID the record was synced from |
 | `created_at` | TEXT | NO | — | Record creation time (ISO 8601 UTC) |
 | `updated_at` | TEXT | NO | — | Last update time (ISO 8601 UTC) |
 

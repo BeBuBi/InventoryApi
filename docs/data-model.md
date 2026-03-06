@@ -2,7 +2,7 @@
 ## Server Inventory System
 
 **Version:** 1.0
-**Last Updated:** 2026-02-27
+**Last Updated:** 2026-03-06
 **Database:** SQLite 3.x
 
 ---
@@ -79,6 +79,7 @@ The data model consists of five tables stored in a single SQLite database file (
 │ environment             │
 │ team                    |
 | location                │
+│ account_id              │
 │ created_at              │
 │ updated_at              │
 └─────────────────────────┘     ┌─────────────────────────┐
@@ -180,6 +181,7 @@ New Relic infrastructure monitoring data. Populated by the New Relic sync job vi
 | environment          | TEXT    |             | Environment custom attribute                             |
 | team                 | TEXT    |             | Team custom attribute                                    |
 | location             | TEXT    |             | Location custom attribute                                |
+| account_id           | TEXT    |             | New Relic account ID the record was synced from          |
 | created_at           | TEXT    | NOT NULL    | Record creation time (ISO 8601 UTC)                      |
 | updated_at           | TEXT    | NOT NULL    | Last update time (ISO 8601 UTC)                          |
 

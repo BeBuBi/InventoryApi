@@ -39,6 +39,7 @@ import { SyncStatus } from '../../core/models/sync-schedule.model';
           <option value="poweredOff">Powered Off</option>
           <option value="suspended">Suspended</option>
         </select>
+        <span class="ml-auto self-center text-sm text-gray-500">{{ totalElements }} records</span>
       </div>
 
       <!-- Table -->

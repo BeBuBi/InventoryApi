@@ -24,6 +24,10 @@ public class NewRelicService {
         return new PagedResponse<>(results.map(NewRelicResponse::new));
     }
 
+    public java.util.List<String> listEnvironments() {
+        return newRelicRepository.findDistinctEnvironments();
+    }
+
     public NewRelicResponse getByHostname(String hostname) {
         return newRelicRepository.findById(hostname)
                 .map(NewRelicResponse::new)

@@ -23,4 +23,7 @@ public interface NewRelicRepository extends JpaRepository<NewRelic, String> {
             @Param("environment") String environment,
             Pageable pageable
     );
+
+    @Query("SELECT DISTINCT n.environment FROM NewRelic n WHERE n.environment IS NOT NULL ORDER BY n.environment")
+    java.util.List<String> findDistinctEnvironments();
 }

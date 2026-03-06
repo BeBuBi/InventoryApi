@@ -20,6 +20,7 @@ public class NewRelicResponse {
     private final String environment;
     private final String team;
     private final String location;
+    private final String accountId;
     private final String createdAt;
     private final String updatedAt;
 
@@ -36,6 +37,7 @@ public class NewRelicResponse {
         this.environment = n.getEnvironment();
         this.team = n.getTeam();
         this.location = n.getLocation();
+        this.accountId = n.getAccountId();
         this.createdAt = n.getCreatedAt();
         this.updatedAt = n.getUpdatedAt();
     }

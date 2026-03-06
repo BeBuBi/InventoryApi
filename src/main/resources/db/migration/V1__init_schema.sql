@@ -73,6 +73,7 @@ CREATE TABLE newrelic (
     environment           TEXT,
     team                  TEXT,
     location              TEXT,
+    account_id            TEXT,
     created_at            TEXT    NOT NULL,
     updated_at            TEXT    NOT NULL,
     PRIMARY KEY (hostname)

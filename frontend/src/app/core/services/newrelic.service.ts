@@ -27,6 +27,10 @@ export class NewRelicService {
     return this.http.get<PagedResponse<NewRelicRecord>>(this.base, { params: p });
   }
 
+  getEnvironments(): Observable<string[]> {
+    return this.http.get<string[]>(`${this.base}/environments`);
+  }
+
   getByHostname(hostname: string): Observable<NewRelicRecord> {
     return this.http.get<NewRelicRecord>(`${this.base}/${hostname}`);
   }

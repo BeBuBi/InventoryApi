@@ -10,8 +10,10 @@ import org.springframework.web.client.RestClient;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Slf4j
 @Component
@@ -28,7 +30,7 @@ public class NewRelicApiClient {
             String ipv4Address, String ipv6Address,
             Integer processorCount, Integer coreCount, Long systemMemoryBytes,
             String linuxDistribution, String service, String environment,
-            String team, String location
+            String team, String location, String accountId
     ) {}
 
     public List<HostData> fetchAllHosts(String credentialId) throws Exception {
@@ -39,13 +41,15 @@ public class NewRelicApiClient {
         String apiKey = config.get("apiKey").asText();
         String accountId = config.get("accountId").asText();
 
-        // NetworkSample has one row per network interface per host.
-        // SELECT * returns every interface row; we group and merge in Java.
+        // Fetch NetworkSample (IP/network fields) and SystemSample (hardware fields) in one request.
         String query = """
                 {
                   actor {
                     account(id: %s) {
-                      infrastracture: nrql(query: "SELECT * FROM NetworkSample LIMIT MAX SINCE 1 day ago") {
+                      network: nrql(query: "SELECT * FROM NetworkSample LIMIT MAX SINCE 1 day ago") {
+                        results
+                      }
+                      system: nrql(query: "SELECT latest(processorCount), latest(coreCount), latest(systemMemoryBytes), latest(linuxDistribution) FROM SystemSample FACET hostname LIMIT MAX SINCE 1 day ago") {
                         results
                       }
                     }
@@ -64,13 +68,22 @@ public class NewRelicApiClient {
                 .retrieve()
                 .body(String.class);
 
-        JsonNode rows = objectMapper.readTree(responseJson)
-                .path("data").path("actor").path("account")
-                .path("infrastracture").path("results");
+        JsonNode account = objectMapper.readTree(responseJson)
+                .path("data").path("actor").path("account");
 
-        // Group all interface rows by hostname (preserving insertion order)
+        JsonNode networkRows = account.path("network").path("results");
+        JsonNode systemRows  = account.path("system").path("results");
+
+        // Build a hostname -> SystemSample lookup map
+        Map<String, JsonNode> systemByHostname = new LinkedHashMap<>();
+        for (JsonNode row : systemRows) {
+            String h = row.path("hostname").asText(null);
+            if (h != null) systemByHostname.put(h.split("\\.")[0].toLowerCase(), row);
+        }
+
+        // Group NetworkSample rows by hostname
         Map<String, List<JsonNode>> byHostname = new LinkedHashMap<>();
-        for (JsonNode row : rows) {
+        for (JsonNode row : networkRows) {
             String hostname = row.path("hostname").asText(null);
             if (hostname != null) {
                 byHostname.computeIfAbsent(hostname, k -> new ArrayList<>()).add(row);
@@ -79,70 +92,68 @@ public class NewRelicApiClient {
 
         List<HostData> result = new ArrayList<>();
         for (List<JsonNode> interfaceRows : byHostname.values()) {
-            HostData host = mergeInterfaceRows(interfaceRows);
+            HostData host = mergeInterfaceRows(interfaceRows, accountId, systemByHostname);
             if (host != null) result.add(host);
         }
 
-        log.info("New Relic sync: fetched {} hosts ({} interface rows) for account {}",
-                result.size(), rows.size(), accountId);
+        log.info("New Relic sync: fetched {} hosts ({} network rows, {} system rows) for account {}",
+                result.size(), networkRows.size(), systemRows.size(), accountId);
         return result;
     }
 
     /**
-     * Merges all NetworkSample rows for a single host into one HostData record.
+     * Merges NetworkSample interface rows with a SystemSample row for a single host.
      *
-     * NetworkSample emits one row per network interface, so a host with multiple
-     * NICs produces multiple rows. Host-level fields (fullHostname, service,
-     * environment, team, location) are the same across all rows; IP fields are
-     * scanned across all rows to find the best routable address.
-     *
-     * Fields not present in NetworkSample (processorCount, coreCount,
-     * systemMemoryBytes, linuxDistribution) are stored as null.
+     * NetworkSample emits one row per network interface; we scan all rows for the
+     * best routable IP. Hardware fields (processorCount, coreCount, systemMemoryBytes,
+     * linuxDistribution) come from SystemSample, looked up by short hostname.
      */
-    private HostData mergeInterfaceRows(List<JsonNode> rows) {
+    private HostData mergeInterfaceRows(List<JsonNode> rows, String accountId,
+                                        Map<String, JsonNode> systemByHostname) {
         JsonNode first = rows.get(0);
 
         String hostname = first.path("hostname").asText(null);
         if (hostname == null) return null;
 
-        // fullHostname is the FQDN reported by the NR infrastructure agent
         String fullHostname = first.path("fullHostname").asText(null);
         String shortHostname = (fullHostname != null ? fullHostname : hostname).split("\\.")[0].toLowerCase();
 
-        // Scan every interface row for the best routable addresses.
-        // NetworkSample ipV4Address/ipV6Address are single values per row.
-        String ipv4 = null;
-        String ipv6 = null;
-
+        // Collect all unique routable IPs across every interface row.
+        // Strip subnet notation (e.g. "10.0.0.1/24" -> "10.0.0.1") before storing.
+        Set<String> ipv4Set = new LinkedHashSet<>();
+        Set<String> ipv6Set = new LinkedHashSet<>();
         for (JsonNode row : rows) {
-            if (ipv4 == null) {
-                String ip4 = row.path("ipV4Address").asText(null);
-                if (ip4 != null && !ip4.startsWith("127.") && !ip4.startsWith("169.254.")) {
-                    ipv4 = ip4;
-                }
-            }
-            if (ipv6 == null) {
-                String ip6 = row.path("ipV6Address").asText(null);
-                if (ip6 != null && !ip6.isBlank() && !"::1".equals(ip6)) {
-                    ipv6 = ip6;
-                }
-            }
-            if (ipv4 != null && ipv6 != null) break;
+            String ip4 = stripSubnet(row.path("ipV4Address").asText(null));
+            if (ip4 != null && !ip4.startsWith("127.") && !ip4.startsWith("169.254.")) ipv4Set.add(ip4);
+
+            String ip6 = stripSubnet(row.path("ipV6Address").asText(null));
+            if (ip6 != null && !ip6.isBlank() && !"::1".equals(ip6)) ipv6Set.add(ip6);
         }
+        String ipv4 = ipv4Set.isEmpty() ? null : String.join(",", ipv4Set);
+        String ipv6 = ipv6Set.isEmpty() ? null : String.join(",", ipv6Set);
+
+        // Pull hardware fields from SystemSample if available
+        JsonNode sys = systemByHostname.get(shortHostname);
+        Integer processorCount   = sys != null && sys.hasNonNull("latest.processorCount")   ? sys.get("latest.processorCount").asInt()     : null;
+        Integer coreCount        = sys != null && sys.hasNonNull("latest.coreCount")        ? sys.get("latest.coreCount").asInt()           : null;
+        Long systemMemoryBytes   = sys != null && sys.hasNonNull("latest.systemMemoryBytes") ? sys.get("latest.systemMemoryBytes").asLong() : null;
+        String linuxDistribution = sys != null ? sys.path("latest.linuxDistribution").asText(null) : null;
 
         return new HostData(
-                shortHostname,
-                fullHostname,
-                ipv4,
-                ipv6,
-                null,   // processorCount — not in NetworkSample
-                null,   // coreCount      — not in NetworkSample
-                null,   // systemMemoryBytes — not in NetworkSample
-                null,   // linuxDistribution — not in NetworkSample
+                shortHostname, fullHostname, ipv4, ipv6,
+                processorCount, coreCount, systemMemoryBytes, linuxDistribution,
                 first.path("service").asText(null),
                 first.path("environment").asText(null),
                 first.path("team").asText(null),
-                first.path("location").asText(null)
+                first.path("location").asText(null),
+                accountId
         );
+    }
+
+    /** Strips CIDR subnet notation from an IP address (e.g. "10.0.0.1/24" -> "10.0.0.1"). */
+    private String stripSubnet(String ip) {
+        if (ip == null || ip.isBlank()) return null;
+        int slash = ip.indexOf('/');
+        return slash >= 0 ? ip.substring(0, slash).trim() : ip.trim();
     }
 }

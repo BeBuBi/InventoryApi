@@ -91,6 +91,7 @@ public class NewRelicSyncJob {
         entity.setEnvironment(host.environment());
         entity.setTeam(host.team());
         entity.setLocation(host.location());
+        entity.setAccountId(host.accountId());
         newRelicRepository.save(entity);
     }
 }

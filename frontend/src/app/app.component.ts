@@ -9,8 +9,9 @@ import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
     <div class="flex h-screen bg-gray-50">
       <!-- Sidebar -->
       <nav class="w-56 bg-gray-900 text-white flex flex-col">
-        <div class="px-6 py-5 text-lg font-bold tracking-wide border-b border-gray-700">
-          Server Inventory
+        <div class="px-6 py-5 border-b border-gray-700 flex flex-col gap-2">
+          <img src="assets/cox-logo.svg" alt="Cox Communications" class="h-6 w-auto brightness-0 invert" />
+          <span class="text-sm font-semibold tracking-wide text-gray-300 text-center">Server Inventory</span>
         </div>
         <ul class="flex-1 py-4 space-y-1">
           <li>

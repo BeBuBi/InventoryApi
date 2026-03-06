@@ -26,7 +26,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 cd frontend
 
-# Install dependencies
+# Install dependencies (required before first run)
 npm install
 
 # Dev server (http://localhost:4200)
@@ -43,13 +43,21 @@ npm test
 - `ENCRYPTION_KEY` — 32-byte (256-bit) key for AES-256-GCM credential encryption (mandatory at runtime)
 - `app.cors.allowed-origins` — CORS origin for frontend (default: `http://localhost:4200`)
 
+### Git Remote Operations (Corporate SSL Proxy)
+All git operations involving the remote require SSL verification disabled due to a self-signed certificate in the corporate proxy chain:
+```bash
+git -c http.sslVerify=false fetch origin
+git -c http.sslVerify=false pull --rebase
+git -c http.sslVerify=false push origin main
+```
+
 ---
 
 ## Architecture
 
 ### Overview
 Monolith with two independently deployed services:
-- **Backend:** Spring Boot 3.2.5 / Java 21 on port 8080
+- **Backend:** Spring Boot 3.2.5 / Java 17 (source compatibility) on port 8080
 - **Frontend:** Angular 18 on port 4200 (dev) / 80 (prod via nginx)
 - **Database:** Single SQLite 3.45 file with WAL mode (`inventory.db` in working directory)
 

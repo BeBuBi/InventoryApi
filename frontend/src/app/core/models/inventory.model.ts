@@ -47,15 +47,18 @@ export interface VsphereData {
 
 export interface NewRelicData {
   hostname: string;
-  fqdn?: string;
+  fullHostname?: string;
   ipv4Address?: string;
   ipv6Address?: string;
-  cpuCount?: number;
-  cpuCores?: number;
-  memoryGb?: number;
-  guestOs?: string;
-  application?: string;
+  processorCount?: number;
+  coreCount?: number;
+  systemMemoryBytes?: number;
+  linuxDistribution?: string;
+  service?: string;
   environment?: string;
-  tags?: string;
-  lastReportedAt?: string;
+  team?: string;
+  location?: string;
+  accountId?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }

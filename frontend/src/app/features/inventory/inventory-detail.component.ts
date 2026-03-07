@@ -77,18 +77,18 @@ import { AssetDetail } from '../../core/models/inventory.model';
         <div *ngIf="activeTab==='newrelic'" class="bg-white rounded-lg shadow p-6">
           <div *ngIf="detail.newRelic; else noNrData">
             <dl class="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
-              <div><dt class="text-gray-500">FQDN</dt><dd class="font-medium">{{ detail.newRelic.fqdn || '—' }}</dd></div>
-              <div><dt class="text-gray-500">Guest OS</dt><dd class="font-medium">{{ detail.newRelic.guestOs || '—' }}</dd></div>
-              <div><dt class="text-gray-500">Application</dt><dd class="font-medium">{{ detail.newRelic.application || '—' }}</dd></div>
+              <div><dt class="text-gray-500">Full Hostname</dt><dd class="font-medium">{{ detail.newRelic.fullHostname || '—' }}</dd></div>
               <div><dt class="text-gray-500">Environment</dt><dd class="font-medium">{{ detail.newRelic.environment || '—' }}</dd></div>
-              <div><dt class="text-gray-500">CPU</dt><dd class="font-medium">{{ detail.newRelic.cpuCount ?? '—' }}</dd></div>
-              <div><dt class="text-gray-500">Memory</dt><dd class="font-medium">{{ detail.newRelic.memoryGb ?? '—' }} GB</dd></div>
-              <div><dt class="text-gray-500">IPv4</dt><dd class="font-medium">{{ detail.newRelic.ipv4Address || '—' }}</dd></div>
-              <div><dt class="text-gray-500">Last Reported</dt><dd class="font-medium">{{ detail.newRelic.lastReportedAt | date:'medium' }}</dd></div>
-              <div *ngIf="detail.newRelic.tags" class="col-span-2">
-                <dt class="text-gray-500 mb-1">Tags</dt>
-                <dd class="font-mono text-xs bg-gray-50 p-2 rounded">{{ detail.newRelic.tags }}</dd>
-              </div>
+              <div><dt class="text-gray-500">Service</dt><dd class="font-medium">{{ detail.newRelic.service || '—' }}</dd></div>
+              <div><dt class="text-gray-500">Team</dt><dd class="font-medium">{{ detail.newRelic.team || '—' }}</dd></div>
+              <div><dt class="text-gray-500">Location</dt><dd class="font-medium">{{ detail.newRelic.location || '—' }}</dd></div>
+              <div><dt class="text-gray-500">Account ID</dt><dd class="font-medium">{{ detail.newRelic.accountId || '—' }}</dd></div>
+              <div><dt class="text-gray-500">CPU (processors)</dt><dd class="font-medium">{{ detail.newRelic.processorCount ?? '—' }}</dd></div>
+              <div><dt class="text-gray-500">CPU (cores)</dt><dd class="font-medium">{{ detail.newRelic.coreCount ?? '—' }}</dd></div>
+              <div><dt class="text-gray-500">Memory</dt><dd class="font-medium">{{ detail.newRelic.systemMemoryBytes != null ? (detail.newRelic.systemMemoryBytes / 1073741824 | number:'1.0-0') + ' GB' : '—' }}</dd></div>
+              <div><dt class="text-gray-500">Linux Distro</dt><dd class="font-medium">{{ detail.newRelic.linuxDistribution || '—' }}</dd></div>
+              <div><dt class="text-gray-500">IPv4</dt><dd class="font-medium font-mono text-xs">{{ detail.newRelic.ipv4Address || '—' }}</dd></div>
+              <div><dt class="text-gray-500">IPv6</dt><dd class="font-medium font-mono text-xs">{{ detail.newRelic.ipv6Address || '—' }}</dd></div>
             </dl>
           </div>
           <ng-template #noNrData>

@@ -79,13 +79,20 @@ public class VsphereSyncJob {
     }
 
     private void upsert(VmData vm) {
-        Vsphere entity = vsphereRepository.findById(vm.hostname())
-                .orElse(new Vsphere());
+        // Look up by vmId first — it's the stable identity even if hostname changes.
+        // If the hostname changed, delete the stale old row before saving the updated one.
+        Vsphere entity = vsphereRepository.findByVmId(vm.vmId()).orElse(null);
+        if (entity == null) {
+            entity = vsphereRepository.findById(vm.hostname()).orElse(new Vsphere());
+        } else if (!entity.getHostname().equals(vm.hostname())) {
+            vsphereRepository.deleteById(entity.getHostname());
+            vsphereRepository.flush(); // force DELETE SQL before INSERT to avoid vm_id UNIQUE conflict
+            entity = new Vsphere();
+        }
         entity.setHostname(vm.hostname());
         entity.setFqdn(vm.fqdn());
         entity.setVmName(vm.vmName());
         entity.setVmId(vm.vmId());
-        entity.setCluster(vm.cluster());
         entity.setDatacenter(vm.datacenter());
         entity.setDatastore(vm.datastore());
         entity.setCpuCount(vm.cpuCount());

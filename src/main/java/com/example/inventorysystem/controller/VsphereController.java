@@ -24,12 +24,11 @@ public class VsphereController {
     @GetMapping
     public PagedResponse<VsphereResponse> list(
             @RequestParam(required = false) String search,
-            @RequestParam(required = false) String cluster,
             @RequestParam(required = false) String datacenter,
             @RequestParam(required = false) String powerState,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return vsphereService.list(search, cluster, datacenter, powerState, page, size);
+        return vsphereService.list(search, datacenter, powerState, page, size);
     }
 
     @GetMapping("/{hostname}")

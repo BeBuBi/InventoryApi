@@ -1,9 +1,33 @@
-import { Component, OnInit, inject, HostListener } from '@angular/core';
+import { Component, OnInit, inject, DestroyRef } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Subject } from 'rxjs';
+import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
 import { NewRelicService } from '../../core/services/newrelic.service';
 import { NewRelicRecord } from '../../core/models/newrelic.model';
 import { SyncStatus } from '../../core/models/sync-schedule.model';
+
+interface ColumnDef {
+  key: keyof NewRelicRecord;
+  label: string;
+  visible: boolean;
+}
+
+// Precomputed display shape for one row — avoids calling formatCell/sortIps/formatMemory
+// per cell per change-detection cycle.
+interface NewRelicDisplayRow extends NewRelicRecord {
+  _ipv4Sorted: string;
+  _ipv6Sorted: string;
+  _memoryFormatted: string;
+  _createdAtFormatted: string;
+  _updatedAtFormatted: string;
+}
+
+// Static sets used for O(1) column-type checks inside [class.*] bindings.
+// Defined at module scope so they are not recreated per instance.
+const NUMERIC_COLS = new Set<keyof NewRelicRecord>(['processorCount', 'coreCount', 'systemMemoryBytes']);
+const IP_COLS      = new Set<keyof NewRelicRecord>(['ipv4Address', 'ipv6Address']);
 
 @Component({
   selector: 'app-newrelic-list',
@@ -24,131 +48,108 @@ import { SyncStatus } from '../../core/models/sync-schedule.model';
         </div>
       </div>
 
-      <!-- Filters + Column Picker -->
+      <!-- Filters + Column Picker toggle -->
       <div class="bg-white rounded-lg shadow p-4 mb-4 flex flex-wrap items-center gap-3">
-        <input [(ngModel)]="search" (ngModelChange)="onFilter()" placeholder="Search hostname..."
+        <input [(ngModel)]="search" (ngModelChange)="onSearchChange()" placeholder="Search hostname..."
                class="border border-gray-300 rounded px-3 py-2 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-blue-500" />
         <select [(ngModel)]="filterAccountId" (ngModelChange)="onFilter()"
                 class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none">
           <option value="">All Accounts</option>
-          <option *ngFor="let id of accountIds" [value]="id">{{ id }}</option>
+          <option *ngFor="let id of accountIds; trackBy: trackByValue" [value]="id">{{ id }}</option>
         </select>
         <select [(ngModel)]="filterEnv" (ngModelChange)="onFilter()"
                 class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none">
           <option value="">All Environments</option>
-          <option *ngFor="let env of environments" [value]="env">{{ env }}</option>
+          <option *ngFor="let env of environments; trackBy: trackByValue" [value]="env">{{ env }}</option>
         </select>
         <span class="text-sm text-gray-500">{{ totalElements }} records</span>
 
-<!-- Columns button and picker panel -->
-        <div class="relative ml-auto" id="col-picker-root">
-          <button
-            (click)="toggleColPicker($event)"
-            class="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            aria-haspopup="true"
-            [attr.aria-expanded]="showColPicker"
-            aria-controls="col-picker-panel"
-          >
-            <svg class="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round"
-                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+        <!-- Column picker button -->
+        <div class="relative ml-auto">
+          <button (click)="showColumnPicker = !showColumnPicker"
+                  class="flex items-center gap-1 px-3 py-2 border border-gray-300 rounded text-sm text-gray-600 hover:bg-gray-50 focus:outline-none">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7" />
             </svg>
             Columns
-            <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold">
-              {{ visibleColCount }}
+            <span class="bg-blue-100 text-blue-700 text-xs font-medium px-1.5 py-0.5 rounded">
+              {{ visibleColumns.length }}
             </span>
           </button>
 
-          <!-- Picker panel -->
-          <div
-            *ngIf="showColPicker"
-            id="col-picker-panel"
-            role="dialog"
-            aria-label="Toggle column visibility"
-            class="absolute right-0 mt-1 w-52 bg-white border border-gray-200 rounded-lg shadow-md z-20 py-1"
-          >
-            <div class="flex items-center justify-between px-3 py-2 border-b border-gray-100">
-              <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Visible Columns</span>
-              <button
-                (click)="showColPicker = false"
-                class="text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
-                aria-label="Close column picker"
-              >
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+          <!-- Dropdown panel -->
+          <div *ngIf="showColumnPicker"
+               class="absolute right-0 top-10 z-20 bg-white border border-gray-200 rounded-lg shadow-lg w-64 p-3">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Show / Reorder Columns</span>
+              <button (click)="showColumnPicker = false" class="text-gray-400 hover:text-gray-600 text-lg leading-none">&times;</button>
             </div>
-
-            <ul class="py-1" role="list">
-              <!-- Hostname: always visible, disabled -->
-              <li class="flex items-center gap-2 px-3 py-2 opacity-60 cursor-not-allowed select-none">
-                <input type="checkbox" checked disabled
-                       class="h-4 w-4 rounded border-gray-300 text-blue-600"
-                       id="col-hostname"
-                       aria-label="Hostname always visible" />
-                <label for="col-hostname" class="text-sm text-gray-700 cursor-not-allowed">Hostname</label>
-                <span class="ml-auto text-xs text-gray-400 italic">always on</span>
-              </li>
-
-              <li *ngFor="let col of colDefs" class="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer">
-                <input
-                  type="checkbox"
-                  [(ngModel)]="cols[col.key]"
-                  [id]="'col-' + col.key"
-                  class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                  [attr.aria-label]="'Toggle ' + col.label + ' column'"
-                />
-                <label [for]="'col-' + col.key" class="text-sm text-gray-700 cursor-pointer select-none flex-1">
-                  {{ col.label }}
-                </label>
-              </li>
-            </ul>
+            <div class="space-y-1 max-h-80 overflow-y-auto pr-1">
+              <div *ngFor="let col of columns; let i = index"
+                   class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50">
+                <!-- Up / Down -->
+                <div class="flex flex-col gap-0.5">
+                  <button (click)="moveColumn(i, -1)" [disabled]="i === 0"
+                          class="text-gray-300 hover:text-gray-600 disabled:opacity-20 leading-none text-xs">&#9650;</button>
+                  <button (click)="moveColumn(i, 1)" [disabled]="i === columns.length - 1"
+                          class="text-gray-300 hover:text-gray-600 disabled:opacity-20 leading-none text-xs">&#9660;</button>
+                </div>
+                <!-- Checkbox -->
+                <input type="checkbox" [(ngModel)]="col.visible" (ngModelChange)="refreshVisibleColumns()"
+                       class="w-4 h-4 accent-blue-600 cursor-pointer" />
+                <span class="text-sm text-gray-700 select-none cursor-pointer"
+                      (click)="col.visible = !col.visible; refreshVisibleColumns()">{{ col.label }}</span>
+              </div>
+            </div>
+            <div class="mt-3 pt-2 border-t border-gray-100 flex justify-between">
+              <button (click)="resetColumns()"
+                      class="text-xs text-gray-400 hover:text-gray-600">Reset defaults</button>
+              <span class="text-xs text-gray-400">{{ visibleColumns.length }} of {{ columns.length }}</span>
+            </div>
           </div>
         </div>
+
       </div>
 
       <!-- Table -->
-      <div class="bg-white rounded-lg shadow overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200 text-sm">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Hostname</th>
-                <th *ngIf="cols['accountId']"      class="px-4 py-3 text-left  text-xs font-medium text-gray-500 uppercase tracking-wide">Account ID</th>
-                <th *ngIf="cols['location']"       class="px-4 py-3 text-left  text-xs font-medium text-gray-500 uppercase tracking-wide">Location</th>
-                <th *ngIf="cols['environment']"    class="px-4 py-3 text-left  text-xs font-medium text-gray-500 uppercase tracking-wide">Environment</th>
-                <th *ngIf="cols['team']"           class="px-4 py-3 text-left  text-xs font-medium text-gray-500 uppercase tracking-wide">Team</th>
-                <th *ngIf="cols['service']"        class="px-4 py-3 text-left  text-xs font-medium text-gray-500 uppercase tracking-wide">Service</th>
-                <th *ngIf="cols['ipv4Address']"    class="px-4 py-3 text-left  text-xs font-medium text-gray-500 uppercase tracking-wide">IPv4</th>
-                <th *ngIf="cols['ipv6Address']"    class="px-4 py-3 text-left  text-xs font-medium text-gray-500 uppercase tracking-wide">IPv6</th>
-                <th *ngIf="cols['processorCount']" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wide">Processors</th>
-                <th *ngIf="cols['coreCount']"      class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wide">Cores</th>
-                <th *ngIf="cols['systemMemoryBytes']"  class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wide">Memory (GB)</th>
-                <th *ngIf="cols['linuxDistribution']"  class="px-4 py-3 text-left  text-xs font-medium text-gray-500 uppercase tracking-wide">Linux Distro</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100">
-              <tr *ngFor="let host of items" class="hover:bg-gray-50">
-                <td class="px-4 py-3 font-medium text-gray-900">{{ host.hostname }}</td>
-                <td *ngIf="cols['accountId']"       class="px-4 py-3 text-gray-600">{{ host.accountId || '—' }}</td>
-                <td *ngIf="cols['location']"        class="px-4 py-3 text-gray-600">{{ host.location || '—' }}</td>
-                <td *ngIf="cols['environment']"     class="px-4 py-3 text-gray-600">{{ host.environment || '—' }}</td>
-                <td *ngIf="cols['team']"            class="px-4 py-3 text-gray-600">{{ host.team || '—' }}</td>
-                <td *ngIf="cols['service']"         class="px-4 py-3 text-gray-600">{{ host.service || '—' }}</td>
-                <td *ngIf="cols['ipv4Address']"     class="px-4 py-3 text-gray-600 font-mono text-xs">{{ host.ipv4Address || '—' }}</td>
-                <td *ngIf="cols['ipv6Address']"     class="px-4 py-3 text-gray-600 font-mono text-xs">{{ host.ipv6Address || '—' }}</td>
-                <td *ngIf="cols['processorCount']"  class="px-4 py-3 text-gray-600 text-right">{{ host.processorCount ?? '—' }}</td>
-                <td *ngIf="cols['coreCount']"       class="px-4 py-3 text-gray-600 text-right">{{ host.coreCount ?? '—' }}</td>
-                <td *ngIf="cols['systemMemoryBytes']"   class="px-4 py-3 text-gray-600 text-right">{{ formatMemory(host.systemMemoryBytes) }}</td>
-                <td *ngIf="cols['linuxDistribution']"   class="px-4 py-3 text-gray-600">{{ host.linuxDistribution || '—' }}</td>
-              </tr>
-              <tr *ngIf="items.length === 0">
-                <td [attr.colspan]="visibleColCount" class="px-4 py-8 text-center text-gray-400">No New Relic records found</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+      <div class="bg-white rounded-lg shadow overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 text-sm">
+          <thead class="bg-gray-50">
+            <tr>
+              <th *ngFor="let col of visibleColumns; trackBy: trackByColKey"
+                  class="px-4 py-3 text-xs font-medium text-gray-500 uppercase whitespace-nowrap"
+                  [class.text-left]="!isNumericCol(col.key)"
+                  [class.text-right]="isNumericCol(col.key)">
+                {{ col.label }}
+              </th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <tr *ngFor="let host of displayItems; trackBy: trackByHostname" class="hover:bg-gray-50">
+              <td *ngFor="let col of visibleColumns; trackBy: trackByColKey" class="px-4 py-3 whitespace-nowrap"
+                  [class.font-medium]="col.key === 'hostname'"
+                  [class.text-gray-900]="col.key === 'hostname'"
+                  [class.text-gray-600]="col.key !== 'hostname'"
+                  [class.text-right]="isNumericCol(col.key)"
+                  [class.font-mono]="isIpCol(col.key)"
+                  [class.text-xs]="isIpCol(col.key)">
+                <ng-container [ngSwitch]="col.key">
+                  <ng-container *ngSwitchCase="'systemMemoryBytes'">{{ host._memoryFormatted }}</ng-container>
+                  <ng-container *ngSwitchCase="'ipv4Address'">{{ host._ipv4Sorted }}</ng-container>
+                  <ng-container *ngSwitchCase="'ipv6Address'">{{ host._ipv6Sorted }}</ng-container>
+                  <ng-container *ngSwitchCase="'createdAt'">{{ host._createdAtFormatted }}</ng-container>
+                  <ng-container *ngSwitchCase="'updatedAt'">{{ host._updatedAtFormatted }}</ng-container>
+                  <ng-container *ngSwitchDefault>{{ host[col.key] ?? '—' }}</ng-container>
+                </ng-container>
+              </td>
+            </tr>
+            <tr *ngIf="displayItems.length === 0">
+              <td [attr.colspan]="visibleColumns.length || 1"
+                  class="px-4 py-8 text-center text-gray-400">No New Relic records found</td>
+            </tr>
+          </tbody>
+        </table>
 
         <!-- Pagination -->
         <div class="px-4 py-3 border-t border-gray-200 flex items-center justify-between text-sm text-gray-600">
@@ -178,8 +179,10 @@ import { SyncStatus } from '../../core/models/sync-schedule.model';
 })
 export class NewRelicListComponent implements OnInit {
   private newRelicService = inject(NewRelicService);
+  private destroyRef = inject(DestroyRef);
 
-  items: NewRelicRecord[] = [];
+  displayItems: NewRelicDisplayRow[] = [];
+  visibleColumns: ColumnDef[] = [];
   environments: string[] = [];
   accountIds: string[] = [];
   syncStatus?: SyncStatus;
@@ -190,107 +193,176 @@ export class NewRelicListComponent implements OnInit {
   search = '';
   filterEnv = '';
   filterAccountId = '';
+  showColumnPicker = false;
 
-  // Column visibility state — hostname is always visible and not tracked here
-  cols: Record<string, boolean> = {
-    accountId:         true,
-    location:          false,
-    environment:       false,
-    team:              false,
-    service:           false,
-    ipv4Address:       true,
-    ipv6Address:       false,
-    processorCount:    true,
-    coreCount:         true,
-    systemMemoryBytes: true,
-    linuxDistribution: true,
-  };
+  // Subject that drives debounced search-triggered loads.
+  private searchTrigger$ = new Subject<void>();
 
-  // Ordered metadata used to render the checkbox list
-  colDefs: { key: string; label: string }[] = [
-    { key: 'accountId',         label: 'Account ID'    },
-    { key: 'location',          label: 'Location'      },
-    { key: 'environment',       label: 'Environment'   },
-    { key: 'team',              label: 'Team'          },
-    { key: 'service',           label: 'Service'       },
-    { key: 'ipv4Address',       label: 'IPv4'          },
-    { key: 'ipv6Address',       label: 'IPv6'          },
-    { key: 'processorCount',    label: 'Processors'    },
-    { key: 'coreCount',         label: 'Cores'         },
-    { key: 'systemMemoryBytes', label: 'Memory (GB)'   },
-    { key: 'linuxDistribution', label: 'Linux Distro'  },
+  // All available columns — initial order and visibility matches the requested defaults
+  columns: ColumnDef[] = [
+    { key: 'hostname',           label: 'Hostname',     visible: true  },
+    { key: 'accountId',          label: 'Account ID',   visible: true  },
+    { key: 'ipv4Address',        label: 'IPv4',         visible: true  },
+    { key: 'processorCount',     label: 'Processors',   visible: true  },
+    { key: 'coreCount',          label: 'Cores',        visible: true  },
+    { key: 'systemMemoryBytes',  label: 'Memory (GB)',  visible: true  },
+    { key: 'linuxDistribution',  label: 'Linux Distro', visible: true  },
+    { key: 'location',           label: 'Location',     visible: false },
+    { key: 'environment',        label: 'Environment',  visible: false },
+    { key: 'team',               label: 'Team',         visible: false },
+    { key: 'service',            label: 'Service',      visible: false },
+    { key: 'ipv6Address',        label: 'IPv6',         visible: false },
   ];
 
-  showColPicker = false;
-
-  /** Total visible column count: hostname (always 1) + enabled optional columns. */
-  get visibleColCount(): number {
-    return 1 + Object.values(this.cols).filter(Boolean).length;
-  }
-
-  toggleColPicker(event: MouseEvent): void {
-    event.stopPropagation();
-    this.showColPicker = !this.showColPicker;
-  }
-
-  /** Close the picker when the user clicks anywhere outside the panel. */
-  @HostListener('document:click', ['$event'])
-  onDocumentClick(event: MouseEvent): void {
-    if (!this.showColPicker) return;
-    const root = document.getElementById('col-picker-root');
-    if (root && !root.contains(event.target as Node)) {
-      this.showColPicker = false;
-    }
-  }
-
-  /** Close the picker on Escape key. */
-  @HostListener('document:keydown.escape')
-  onEscape(): void {
-    this.showColPicker = false;
-  }
+  private readonly defaultColumns = this.columns.map(c => ({ key: c.key, visible: c.visible }));
 
   ngOnInit(): void {
-    this.load();
+    // Seed the cached visible-column list before first render.
+    this.refreshVisibleColumns();
+
+    // Wire up the debounced search pipeline. switchMap cancels any in-flight request
+    // before starting a new one. takeUntilDestroyed cleans up when the component is destroyed.
+    this.searchTrigger$
+      .pipe(
+        debounceTime(300),
+        distinctUntilChanged(),
+        switchMap(() => this.newRelicService.list({
+          search: this.search,
+          environment: this.filterEnv,
+          accountId: this.filterAccountId,
+          page: this.currentPage,
+          size: this.pageSize
+        })),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe(res => {
+        this.totalElements = res.totalElements;
+        this.totalPages = res.totalPages;
+        this.displayItems = res.content.map(host => this.toDisplayRow(host));
+      });
+
+    this.loadImmediate();
     this.loadSyncStatus();
-    this.newRelicService.getEnvironments().subscribe(envs => this.environments = envs);
-    this.newRelicService.getAccountIds().subscribe(ids => this.accountIds = ids);
+
+    this.newRelicService.getEnvironments()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(envs => this.environments = envs);
+
+    this.newRelicService.getAccountIds()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(ids => this.accountIds = ids);
   }
 
-  onFilter(): void { this.currentPage = 0; this.load(); }
-
-  onPageSizeChange(): void { this.currentPage = 0; this.load(); }
-
-  load(): void {
+  // Called for filter/page changes that should load immediately (no debounce needed).
+  loadImmediate(): void {
     this.newRelicService.list({
       search: this.search,
       environment: this.filterEnv,
       accountId: this.filterAccountId,
       page: this.currentPage,
       size: this.pageSize
-    }).subscribe(res => {
-      this.items = res.content;
-      this.totalElements = res.totalElements;
-      this.totalPages = res.totalPages;
-    });
+    })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(res => {
+        this.totalElements = res.totalElements;
+        this.totalPages = res.totalPages;
+        this.displayItems = res.content.map(host => this.toDisplayRow(host));
+      });
   }
 
+  // Keystroke handler — feeds the debounced pipeline.
+  onSearchChange(): void {
+    this.currentPage = 0;
+    this.searchTrigger$.next();
+  }
+
+  onFilter(): void { this.currentPage = 0; this.loadImmediate(); }
+  onPageSizeChange(): void { this.currentPage = 0; this.loadImmediate(); }
+
   loadSyncStatus(): void {
-    this.newRelicService.getSyncStatus().subscribe(s => this.syncStatus = s);
+    this.newRelicService.getSyncStatus()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(s => this.syncStatus = s);
   }
 
   triggerSync(): void {
-    this.newRelicService.triggerSync().subscribe(s => {
-      this.syncStatus = s;
-      setTimeout(() => this.loadSyncStatus(), 3000);
-    });
+    this.newRelicService.triggerSync()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(s => {
+        this.syncStatus = s;
+        setTimeout(() => this.loadSyncStatus(), 3000);
+      });
   }
 
-  prevPage(): void { this.currentPage--; this.load(); }
-  nextPage(): void { this.currentPage++; this.load(); }
+  prevPage(): void { this.currentPage--; this.loadImmediate(); }
+  nextPage(): void { this.currentPage++; this.loadImmediate(); }
 
-  formatMemory(bytes: number | undefined): string {
-    if (bytes == null) return '—';
-    return (bytes / 1073741824).toFixed(1);
+  // Update the cached visible-column list. Called when visibility or order changes.
+  refreshVisibleColumns(): void {
+    this.visibleColumns = this.columns.filter(c => c.visible);
+  }
+
+  moveColumn(index: number, direction: -1 | 1): void {
+    const target = index + direction;
+    if (target < 0 || target >= this.columns.length) return;
+    [this.columns[index], this.columns[target]] = [this.columns[target], this.columns[index]];
+    this.refreshVisibleColumns();
+  }
+
+  resetColumns(): void {
+    const ordered = this.defaultColumns.map(d => this.columns.find(c => c.key === d.key)!);
+    ordered.forEach((col, i) => { col.visible = this.defaultColumns[i].visible; });
+    this.columns = ordered;
+    this.refreshVisibleColumns();
+  }
+
+  // O(1) Set lookups — replaces per-cell method calls in [class.*] bindings.
+  isNumericCol(key: keyof NewRelicRecord): boolean { return NUMERIC_COLS.has(key); }
+  isIpCol(key: keyof NewRelicRecord): boolean      { return IP_COLS.has(key); }
+
+  trackByHostname(_index: number, row: NewRelicDisplayRow): string {
+    return row.hostname;
+  }
+
+  trackByColKey(_index: number, col: ColumnDef): string {
+    return col.key;
+  }
+
+  trackByValue(_index: number, value: string): string {
+    return value;
+  }
+
+  // Convert a raw API record into a display row by precomputing all derived values once.
+  private toDisplayRow(host: NewRelicRecord): NewRelicDisplayRow {
+    return {
+      ...host,
+      _ipv4Sorted:        this.sortIps(host.ipv4Address),
+      _ipv6Sorted:        this.sortIps(host.ipv6Address),
+      _memoryFormatted:   host.systemMemoryBytes != null ? (host.systemMemoryBytes / 1073741824).toFixed(1) : '—',
+      _createdAtFormatted: host.createdAt ? new Date(host.createdAt).toLocaleString() : '—',
+      _updatedAtFormatted: host.updatedAt ? new Date(host.updatedAt).toLocaleString() : '—',
+    };
+  }
+
+  private sortIps(value: string | undefined): string {
+    if (!value || value.trim() === '') return '—';
+    const parts = value.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    const ipv4Re = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+    parts.sort((a, b) => {
+      const ma = ipv4Re.exec(a);
+      const mb = ipv4Re.exec(b);
+      if (ma && mb) {
+        for (let i = 1; i <= 4; i++) {
+          const diff = parseInt(ma[i], 10) - parseInt(mb[i], 10);
+          if (diff !== 0) return diff;
+        }
+        return 0;
+      }
+      if (ma) return -1;
+      if (mb) return 1;
+      return a.localeCompare(b);
+    });
+    return parts.join(', ');
   }
 
   syncStatusClass(status: string): string {

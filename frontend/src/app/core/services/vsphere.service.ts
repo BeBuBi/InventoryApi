@@ -13,7 +13,6 @@ export class VsphereService {
 
   list(params: {
     search?: string;
-    cluster?: string;
     datacenter?: string;
     powerState?: string;
     page?: number;
@@ -21,7 +20,6 @@ export class VsphereService {
   }): Observable<PagedResponse<VsphereRecord>> {
     let p = new HttpParams();
     if (params.search) p = p.set('search', params.search);
-    if (params.cluster) p = p.set('cluster', params.cluster);
     if (params.datacenter) p = p.set('datacenter', params.datacenter);
     if (params.powerState) p = p.set('powerState', params.powerState);
     p = p.set('page', params.page ?? 0);

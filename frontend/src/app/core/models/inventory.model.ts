@@ -35,7 +35,6 @@ export interface VsphereData {
   fqdn?: string;
   vmName: string;
   vmId: string;
-  cluster?: string;
   datacenter?: string;
   datastore?: string;
   cpuCount?: number;

@@ -12,7 +12,6 @@ public class VsphereResponse {
     private final String fqdn;
     private final String vmName;
     private final String vmId;
-    private final String cluster;
     private final String datacenter;
     private final String datastore;
     private final Integer cpuCount;
@@ -34,7 +33,6 @@ public class VsphereResponse {
         this.fqdn = v.getFqdn();
         this.vmName = v.getVmName();
         this.vmId = v.getVmId();
-        this.cluster = v.getCluster();
         this.datacenter = v.getDatacenter();
         this.datastore = v.getDatastore();
         this.cpuCount = v.getCpuCount();

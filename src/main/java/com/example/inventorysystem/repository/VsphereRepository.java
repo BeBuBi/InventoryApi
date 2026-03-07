@@ -8,19 +8,21 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Optional;
+
 @Repository
 public interface VsphereRepository extends JpaRepository<Vsphere, String> {
+
+    Optional<Vsphere> findByVmId(String vmId);
 
     @Query("""
             SELECT v FROM Vsphere v
             WHERE (:search IS NULL OR LOWER(v.hostname) LIKE LOWER(CONCAT('%', :search, '%')))
-              AND (:cluster IS NULL OR v.cluster = :cluster)
               AND (:datacenter IS NULL OR v.datacenter = :datacenter)
               AND (:powerState IS NULL OR v.powerState = :powerState)
             """)
     Page<Vsphere> findAllFiltered(
             @Param("search") String search,
-            @Param("cluster") String cluster,
             @Param("datacenter") String datacenter,
             @Param("powerState") String powerState,
             Pageable pageable

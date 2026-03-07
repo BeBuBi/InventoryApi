@@ -75,11 +75,6 @@ paths:
           schema:
             type: string
             enum: [server, vm, container, network]
-        - name: cluster
-          in: query
-          description: Filter by vSphere cluster name
-          schema:
-            type: string
         - name: datacenter
           in: query
           description: Filter by vSphere datacenter name
@@ -864,10 +859,6 @@ components:
           type: string
           description: vSphere managed object ID (moId)
           example: vm-1042
-        cluster:
-          type: string
-          nullable: true
-          example: prod-cluster-01
         datacenter:
           type: string
           nullable: true

@@ -16,11 +16,11 @@ public class VsphereService {
     private final VsphereRepository vsphereRepository;
 
     public PagedResponse<VsphereResponse> list(
-            String search, String cluster, String datacenter, String powerState, int page, int size) {
+            String search, String datacenter, String powerState, int page, int size) {
 
         var pageable = PageRequest.of(page, size, Sort.by("hostname").ascending());
         var results = vsphereRepository.findAllFiltered(
-                nullIfBlank(search), nullIfBlank(cluster), nullIfBlank(datacenter),
+                nullIfBlank(search), nullIfBlank(datacenter),
                 nullIfBlank(powerState), pageable);
         return new PagedResponse<>(results.map(VsphereResponse::new));
     }

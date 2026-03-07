@@ -34,7 +34,6 @@ CREATE TABLE vsphere (
     fqdn            TEXT,
     vm_name         TEXT    NOT NULL,
     vm_id           TEXT    NOT NULL,
-    cluster         TEXT,
     datacenter      TEXT,
     datastore       TEXT,
     cpu_count       INTEGER,

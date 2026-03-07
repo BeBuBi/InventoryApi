@@ -22,8 +22,6 @@ import java.util.List;
 @RequiredArgsConstructor
 public class CmdbApiClient {
 
-    private static final String SNOW_BASE_URL = "https://coxprod.service-now.com";
-
     private final CredentialService credentialService;
     private final ObjectMapper objectMapper;
 
@@ -39,13 +37,14 @@ public class CmdbApiClient {
         String configJson = credentialService.getDecryptedConfig(id);
         JsonNode config = objectMapper.readTree(configJson);
 
+        String tokenUrl     = config.get("token_url").asText();
+        String apiUrl       = config.get("api_url").asText();
         String clientId     = config.get("client_id").asText();
         String clientSecret = config.get("client_secret").asText();
         String username     = config.get("username").asText();
         String password     = config.get("password").asText();
 
         RestClient client = RestClient.builder()
-                .baseUrl(SNOW_BASE_URL)
                 .requestFactory(trustAllRequestFactory())
                 .build();
 
@@ -58,7 +57,7 @@ public class CmdbApiClient {
         tokenForm.add("password",      password);
 
         String tokenResponseJson = client.post()
-                .uri("/oauth_token.do")
+                .uri(tokenUrl)
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .body(tokenForm)
                 .retrieve()
@@ -77,7 +76,7 @@ public class CmdbApiClient {
 
         // Fetch CMDB asset details
         String responseJson = client.get()
-                .uri("/api/xci/cmdb_asset/getAssetDetails")
+                .uri(apiUrl)
                 .header("Authorization", "Bearer " + accessToken)
                 .header("Accept", "application/json")
                 .retrieve()

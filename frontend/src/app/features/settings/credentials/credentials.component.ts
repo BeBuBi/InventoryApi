@@ -58,6 +58,16 @@ import { Credential, CredentialRequest } from '../../../core/models/credential.m
 
           <!-- CMDB (ServiceNow) fields -->
           <div *ngIf="activeService === 'cmdb'" class="flex flex-col gap-2 flex-1">
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium text-gray-500">OAuth2 Token URL</label>
+              <input [(ngModel)]="cmdbTokenUrl" placeholder="https://your-instance.service-now.com/oauth_token.do"
+                     class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium text-gray-500">Data API URL</label>
+              <input [(ngModel)]="cmdbApiUrl" placeholder="https://your-instance.service-now.com/api/xci/cmdb_asset/getAssetDetails"
+                     class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
             <input [(ngModel)]="cmdbClientId" placeholder="Client ID"
                    class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             <input [(ngModel)]="cmdbClientSecret" type="password" placeholder="Client Secret"
@@ -144,6 +154,8 @@ export class CredentialsComponent implements OnInit {
   nrAccountId = '';
 
   // CMDB (ServiceNow) fields
+  cmdbTokenUrl = '';
+  cmdbApiUrl = '';
   cmdbClientId = '';
   cmdbClientSecret = '';
   cmdbUsername = '';
@@ -163,6 +175,7 @@ export class CredentialsComponent implements OnInit {
     this.newName = '';
     this.vsHost = ''; this.vsUsername = ''; this.vsPassword = '';
     this.nrApiKey = ''; this.nrAccountId = '';
+    this.cmdbTokenUrl = ''; this.cmdbApiUrl = '';
     this.cmdbClientId = ''; this.cmdbClientSecret = ''; this.cmdbUsername = ''; this.cmdbPassword = '';
     this.errorMsg = '';
   }
@@ -175,6 +188,8 @@ export class CredentialsComponent implements OnInit {
       return JSON.stringify({ apiKey: this.nrApiKey.trim(), accountId: this.nrAccountId.trim() });
     }
     return JSON.stringify({
+      token_url:     this.cmdbTokenUrl.trim(),
+      api_url:       this.cmdbApiUrl.trim(),
       client_id:     this.cmdbClientId.trim(),
       client_secret: this.cmdbClientSecret,
       username:      this.cmdbUsername.trim(),
@@ -186,7 +201,7 @@ export class CredentialsComponent implements OnInit {
     if (!this.newName.trim()) return false;
     if (this.activeService === 'vsphere') return !!(this.vsHost.trim() && this.vsUsername.trim() && this.vsPassword);
     if (this.activeService === 'newrelic') return !!(this.nrApiKey.trim() && this.nrAccountId.trim());
-    return !!(this.cmdbClientId.trim() && this.cmdbClientSecret && this.cmdbUsername.trim() && this.cmdbPassword);
+    return !!(this.cmdbTokenUrl.trim() && this.cmdbApiUrl.trim() && this.cmdbClientId.trim() && this.cmdbClientSecret && this.cmdbUsername.trim() && this.cmdbPassword);
   }
 
   loadCredentials(): void {

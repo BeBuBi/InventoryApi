@@ -843,21 +843,9 @@ components:
         hostname:
           type: string
           example: web-prod-01
-        fqdn:
-          type: string
-          nullable: true
-          example: web-prod-01.corp.example.com
         vm_name:
           type: string
           example: web-prod-01
-        vm_id:
-          type: string
-          description: vSphere managed object ID (moId)
-          example: vm-1042
-        datastore:
-          type: string
-          nullable: true
-          example: ds-ssd-01
         cpu_count:
           type: integer
           nullable: true
@@ -874,10 +862,6 @@ components:
           type: integer
           nullable: true
           example: 8
-        disk_gb:
-          type: integer
-          nullable: true
-          example: 100
         power_state:
           type: string
           enum: [poweredOn, poweredOff, suspended]

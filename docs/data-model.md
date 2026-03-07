@@ -43,23 +43,21 @@ The data model consists of five tables stored in a single SQLite database file (
 │         inventory        │     │          vsphere         │
 │─────────────────────────│     │─────────────────────────│
 │ hostname (PK)           │     │ hostname (PK)            │
-│ ip_address              │     │ fqdn                     │
-│ asset_type              │     │ vm_name                  │
-│ environment             │     │ vm_id                    │
-│ owner                   │     │ datastore                │
-│ location                │     │ cpu_count                │
-│ status                  │     │ cpu_cores                │
-│ warranty_expiry         │     │ memory_mb                │
-│ last_patched_at         │     │ memory_gb                │
-│ created_at              │     │ disk_gb                  │
-│ updated_at              │     │ power_state              │
-└─────────────────────────┘     │ guest_os                 │
+│ ip_address              │     │ vm_name                  │
+│ asset_type              │     │ cpu_count                │
+│ environment             │     │ cpu_cores                │
+│ owner                   │     │ memory_mb                │
+│ location                │     │ memory_gb                │
+│ status                  │     │ power_state              │
+│ warranty_expiry         │     │ guest_os                 │
+│ last_patched_at         │     │ tools_status             │
+│ created_at              │     │ ipv4_address             │
+│ updated_at              │     │ ipv6_address             │
+└─────────────────────────┘     │ last_synced_at           │
                                  │ tools_status             │
                                  │ ipv4_address             │
-  Correlated by hostname         │ ipv6_address             │
-  at application layer ─────────│ last_synced_at           │
-                                 │ created_at               │
-                                 │ updated_at               │
+  Correlated by hostname         │ created_at               │
+  at application layer ─────────│ updated_at               │
                                  └─────────────────────────┘
 
 ┌─────────────────────────┐     ┌──────────────────────-───┐
@@ -129,26 +127,22 @@ Core asset registry. Every managed server, VM, or container must have a record h
 
 VMware vSphere VM metadata. Populated by the vSphere sync job. Each record corresponds to one VM in vCenter, identified by `hostname`.
 
-| Column         | Type    | Constraints      | Description                                         |
-|----------------|---------|------------------|-----------------------------------------------------|
-| hostname       | TEXT    | PK               | Asset hostname — primary identifier                 |
-| fqdn           | TEXT    |                  | Fully qualified domain name                         |
-| vm_name        | TEXT    | NOT NULL         | VM display name in vSphere                          |
-| vm_id          | TEXT    | NOT NULL, UNIQUE | vSphere managed object ID (moId)                    |
-| datastore      | TEXT    |                  | Assigned datastore                                  |
-| cpu_count      | INTEGER |                  | Number of vCPUs                                     |
-| cpu_cores      | INTEGER |                  | Number of physical CPU cores                        |
-| memory_mb      | INTEGER |                  | Allocated memory in MB                              |
-| memory_gb      | INTEGER |                  | Allocated memory in GB                              |
-| disk_gb        | INTEGER |                  | Total disk size in GB                               |
-| power_state    | TEXT    |                  | `poweredOn`, `poweredOff`, `suspended`              |
-| guest_os       | TEXT    |                  | Guest operating system                              |
-| tools_status   | TEXT    |                  | VMware Tools status                                 |
-| ipv4_address   | TEXT    |                  | Primary IPv4 address of the VM                      |
-| ipv6_address   | TEXT    |                  | Primary IPv6 address of the VM                      |
-| last_synced_at | TEXT    |                  | Last sync timestamp from vSphere API (ISO 8601 UTC) |
-| created_at     | TEXT    | NOT NULL         | Record creation time (ISO 8601 UTC)                 |
-| updated_at     | TEXT    | NOT NULL         | Last update time (ISO 8601 UTC)                     |
+| Column         | Type    | Constraints | Description                                         |
+|----------------|---------|-------------|-----------------------------------------------------|
+| hostname       | TEXT    | PK          | Asset hostname — primary identifier                 |
+| vm_name        | TEXT    | NOT NULL    | VM display name in vSphere                          |
+| cpu_count      | INTEGER |             | Number of vCPUs                                     |
+| cpu_cores      | INTEGER |             | Number of physical CPU cores                        |
+| memory_mb      | INTEGER |             | Allocated memory in MB                              |
+| memory_gb      | INTEGER |             | Allocated memory in GB                              |
+| power_state    | TEXT    |             | `poweredOn`, `poweredOff`, `suspended`              |
+| guest_os       | TEXT    |             | Guest operating system                              |
+| tools_status   | TEXT    |             | VMware Tools status                                 |
+| ipv4_address   | TEXT    |             | Primary IPv4 address of the VM                      |
+| ipv6_address   | TEXT    |             | Primary IPv6 address of the VM                      |
+| last_synced_at | TEXT    |             | Last sync timestamp from vSphere API (ISO 8601 UTC) |
+| created_at     | TEXT    | NOT NULL    | Record creation time (ISO 8601 UTC)                 |
+| updated_at     | TEXT    | NOT NULL    | Last update time (ISO 8601 UTC)                     |
 
 **Allowed values:**
 

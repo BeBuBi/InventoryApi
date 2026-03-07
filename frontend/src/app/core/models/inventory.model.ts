@@ -32,15 +32,11 @@ export interface AssetDetail {
 
 export interface VsphereData {
   hostname: string;
-  fqdn?: string;
   vmName: string;
-  vmId: string;
-  datastore?: string;
   cpuCount?: number;
   cpuCores?: number;
   memoryMb?: number;
   memoryGb?: number;
-  diskGb?: number;
   powerState?: string;
   guestOs?: string;
   toolsStatus?: string;

@@ -12,7 +12,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.scheduling.support.CronExpression;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
@@ -53,7 +52,6 @@ public class VsphereSyncJob {
         }
     }
 
-    @Transactional
     public void runSync() {
         syncStatusService.markRunning(SERVICE);
         log.info("vSphere sync started");
@@ -63,7 +61,11 @@ public class VsphereSyncJob {
                 try {
                     var vms = vsphereApiClient.fetchAllVms(String.valueOf(cred.getId()));
                     for (VmData vm : vms) {
-                        upsert(vm);
+                        try {
+                            upsert(vm);
+                        } catch (Exception e) {
+                            log.error("Failed to upsert VM {}: {}", vm.hostname(), e.getMessage());
+                        }
                     }
                 } catch (Exception e) {
                     log.error("vSphere sync failed for credential {}: {}", cred.getName(), e.getMessage());
@@ -79,26 +81,13 @@ public class VsphereSyncJob {
     }
 
     private void upsert(VmData vm) {
-        // Look up by vmId first — it's the stable identity even if hostname changes.
-        // If the hostname changed, delete the stale old row before saving the updated one.
-        Vsphere entity = vsphereRepository.findByVmId(vm.vmId()).orElse(null);
-        if (entity == null) {
-            entity = vsphereRepository.findById(vm.hostname()).orElse(new Vsphere());
-        } else if (!entity.getHostname().equals(vm.hostname())) {
-            vsphereRepository.deleteById(entity.getHostname());
-            vsphereRepository.flush(); // force DELETE SQL before INSERT to avoid vm_id UNIQUE conflict
-            entity = new Vsphere();
-        }
+        Vsphere entity = vsphereRepository.findById(vm.hostname()).orElse(new Vsphere());
         entity.setHostname(vm.hostname());
-        entity.setFqdn(vm.fqdn());
         entity.setVmName(vm.vmName());
-        entity.setVmId(vm.vmId());
-        entity.setDatastore(vm.datastore());
         entity.setCpuCount(vm.cpuCount());
         entity.setCpuCores(vm.cpuCores());
         entity.setMemoryMb(vm.memoryMb());
         entity.setMemoryGb(vm.memoryGb());
-        entity.setDiskGb(vm.diskGb());
         entity.setPowerState(vm.powerState());
         entity.setGuestOs(vm.guestOs());
         entity.setToolsStatus(vm.toolsStatus());

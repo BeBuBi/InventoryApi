@@ -13,8 +13,6 @@ import java.util.Optional;
 @Repository
 public interface VsphereRepository extends JpaRepository<Vsphere, String> {
 
-    Optional<Vsphere> findByVmId(String vmId);
-
     @Query("""
             SELECT v FROM Vsphere v
             WHERE (:search IS NULL OR LOWER(v.hostname) LIKE LOWER(CONCAT('%', :search, '%')))

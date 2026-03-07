@@ -112,16 +112,11 @@ VMware vSphere VM metadata. Populated by the vSphere sync job. Each record corre
 ```sql
 CREATE TABLE vsphere (
     hostname        TEXT    NOT NULL,
-    fqdn            TEXT,
     vm_name         TEXT    NOT NULL,
-    vm_id           TEXT    NOT NULL,
-    cluster         TEXT,
-    datastore       TEXT,
     cpu_count       INTEGER,
     cpu_cores       INTEGER,
     memory_mb       INTEGER,
     memory_gb       INTEGER,
-    disk_gb         INTEGER,
     power_state     TEXT    CHECK (power_state  IN ('poweredOn', 'poweredOff', 'suspended')),
     guest_os        TEXT,
     tools_status    TEXT    CHECK (tools_status IN ('toolsOk', 'toolsOld', 'toolsNotRunning', 'toolsNotInstalled')),
@@ -130,24 +125,18 @@ CREATE TABLE vsphere (
     last_synced_at  TEXT,
     created_at      TEXT    NOT NULL,
     updated_at      TEXT    NOT NULL,
-    PRIMARY KEY (hostname),
-    UNIQUE (vm_id)
+    PRIMARY KEY (hostname)
 );
 ```
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | `hostname` | TEXT | NO | — | Asset hostname — primary key and join key |
-| `fqdn` | TEXT | YES | — | Fully qualified domain name |
 | `vm_name` | TEXT | NO | — | VM display name in vSphere |
-| `vm_id` | TEXT | NO | — | vSphere managed object ID (moId) — must be unique |
-| `cluster` | TEXT | YES | — | vSphere cluster name |
-| `datastore` | TEXT | YES | — | Assigned datastore |
 | `cpu_count` | INTEGER | YES | — | Number of vCPUs |
 | `cpu_cores` | INTEGER | YES | — | Number of physical CPU cores |
 | `memory_mb` | INTEGER | YES | — | Allocated memory in MB |
 | `memory_gb` | INTEGER | YES | — | Allocated memory in GB |
-| `disk_gb` | INTEGER | YES | — | Total disk size in GB |
 | `power_state` | TEXT | YES | — | `poweredOn`, `poweredOff`, `suspended` |
 | `guest_os` | TEXT | YES | — | Guest operating system |
 | `tools_status` | TEXT | YES | — | `toolsOk`, `toolsOld`, `toolsNotRunning`, `toolsNotInstalled` |
@@ -315,7 +304,6 @@ VALUES
 | `inventory` | `chk_environment` | CHECK | `environment IN ('production','staging','dev','dr')` |
 | `inventory` | `chk_status` | CHECK | `status IN ('active','maintenance','decommissioned','unknown')` |
 | `vsphere` | `PK` | Primary Key | `hostname` |
-| `vsphere` | `uq_vm_id` | Unique | `vm_id` |
 | `vsphere` | `chk_power_state` | CHECK | `power_state IN ('poweredOn','poweredOff','suspended')` |
 | `vsphere` | `chk_tools_status` | CHECK | `tools_status IN ('toolsOk','toolsOld','toolsNotRunning','toolsNotInstalled')` |
 | `newrelic` | `PK` | Primary Key | `hostname` |

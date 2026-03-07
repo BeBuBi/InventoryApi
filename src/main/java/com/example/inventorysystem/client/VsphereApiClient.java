@@ -23,10 +23,9 @@ public class VsphereApiClient {
     private final ObjectMapper objectMapper;
 
     public record VmData(
-            String hostname, String fqdn, String vmName, String vmId,
-            String datastore,
+            String hostname, String vmName,
             Integer cpuCount, Integer cpuCores,
-            Integer memoryMb, Integer memoryGb, Integer diskGb,
+            Integer memoryMb, Integer memoryGb,
             String powerState, String guestOs, String toolsStatus,
             String ipv4Address, String ipv6Address
     ) {}
@@ -92,7 +91,6 @@ public class VsphereApiClient {
             JsonNode detail = objectMapper.readTree(detailJson);
             // Guest hostname from identity endpoint (separate call in vSphere 8.x)
             String guestHostname = fetchGuestHostname(client, sessionToken, vmId);
-            String fqdn = (guestHostname != null && guestHostname.contains(".")) ? guestHostname : null;
             String hostname = guestHostname != null
                     ? guestHostname.split("\\.")[0].toLowerCase()
                     : vmName.toLowerCase();
@@ -106,11 +104,6 @@ public class VsphereApiClient {
             Integer memoryMb = memory.path("size_MiB").isInt() ? memory.path("size_MiB").asInt() : null;
             Integer memoryGb = memoryMb != null ? memoryMb / 1024 : null;
 
-            // Sum all disk capacities (bytes → GB); API returns disks as an object keyed by disk key
-            Integer diskGb = extractDiskGb(detail.path("disks"));
-            // Extract datastore name from first disk's VMDK backing: "[DatastoreName] folder/disk.vmdk"
-            String datastore = extractDatastoreFromDisks(detail.path("disks"));
-
             // Tools status via dedicated endpoint
             String toolsStatus = fetchToolsStatus(client, sessionToken, vmId);
 
@@ -119,53 +112,14 @@ public class VsphereApiClient {
             String ipv4 = ips[0];
             String ipv6 = ips[1];
 
-            return new VmData(hostname, fqdn, vmName, vmId,
-                    datastore,
-                    cpuCount, cpuCores, memoryMb, memoryGb, diskGb,
+            return new VmData(hostname, vmName,
+                    cpuCount, cpuCores, memoryMb, memoryGb,
                     powerState, guestOs, toolsStatus, ipv4, ipv6);
         } catch (Exception e) {
             log.warn("Failed to fetch details for VM {}: {}", vmId, e.getMessage());
-            return new VmData(vmName.toLowerCase(), null, vmName, vmId,
-                    null,
-                    null, null, null, null, null, powerState, null, null, null, null);
+            return new VmData(vmName.toLowerCase(), vmName,
+                    null, null, null, null, powerState, null, null, null, null);
         }
-    }
-
-    /**
-     * Sums all disk capacities (bytes) and converts to GB.
-     * vSphere returns disks as a JSON object keyed by disk key (e.g., "2000", "2001").
-     */
-    private Integer extractDiskGb(JsonNode disks) {
-        if (disks == null || disks.isMissingNode() || !disks.isObject()) return null;
-        long totalBytes = 0;
-        boolean hasDisks = false;
-        var fields = disks.fields();
-        while (fields.hasNext()) {
-            JsonNode disk = fields.next().getValue();
-            if (disk.has("capacity")) {
-                totalBytes += disk.path("capacity").asLong();
-                hasDisks = true;
-            }
-        }
-        return hasDisks ? (int) (totalBytes / (1024L * 1024 * 1024)) : null;
-    }
-
-    /**
-     * Extracts the datastore name from the first disk's VMDK backing file path.
-     * Example: "[DatastoreName] vm-folder/vm-disk.vmdk" → "DatastoreName"
-     */
-    private String extractDatastoreFromDisks(JsonNode disks) {
-        if (disks == null || disks.isMissingNode() || !disks.isObject()) return null;
-        var fields = disks.fields();
-        while (fields.hasNext()) {
-            JsonNode disk = fields.next().getValue();
-            String vmdkFile = disk.path("backing").path("vmdk_file").asText(null);
-            if (vmdkFile != null && vmdkFile.startsWith("[")) {
-                int end = vmdkFile.indexOf("]");
-                if (end > 1) return vmdkFile.substring(1, end);
-            }
-        }
-        return null;
     }
 
     /**

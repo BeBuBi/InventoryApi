@@ -59,12 +59,10 @@ import { AssetDetail } from '../../core/models/inventory.model';
           <div *ngIf="detail.vsphere; else noData">
             <dl class="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
               <div><dt class="text-gray-500">VM Name</dt><dd class="font-medium">{{ detail.vsphere.vmName }}</dd></div>
-              <div><dt class="text-gray-500">VM ID</dt><dd class="font-medium font-mono text-xs">{{ detail.vsphere.vmId }}</dd></div>
               <div><dt class="text-gray-500">Power State</dt><dd class="font-medium">{{ detail.vsphere.powerState || '—' }}</dd></div>
               <div><dt class="text-gray-500">Guest OS</dt><dd class="font-medium">{{ detail.vsphere.guestOs || '—' }}</dd></div>
               <div><dt class="text-gray-500">CPU</dt><dd class="font-medium">{{ detail.vsphere.cpuCount ?? '—' }} vCPU</dd></div>
               <div><dt class="text-gray-500">Memory</dt><dd class="font-medium">{{ detail.vsphere.memoryGb ?? '—' }} GB</dd></div>
-              <div><dt class="text-gray-500">Disk</dt><dd class="font-medium">{{ detail.vsphere.diskGb ?? '—' }} GB</dd></div>
               <div><dt class="text-gray-500">IPv4</dt><dd class="font-medium">{{ detail.vsphere.ipv4Address || '—' }}</dd></div>
               <div><dt class="text-gray-500">Last Synced</dt><dd class="font-medium">{{ detail.vsphere.lastSyncedAt | date:'medium' }}</dd></div>
               <div><dt class="text-gray-500">Tools Status</dt><dd class="font-medium">{{ detail.vsphere.toolsStatus || '—' }}</dd></div>

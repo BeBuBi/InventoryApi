@@ -72,7 +72,7 @@ The **Server Inventory System** is a backend application that consolidates serve
 | ID | Requirement | Priority |
 |----|-------------|----------|
 | VSP-01 | The system shall sync VM data from VMware vSphere on a configurable schedule | High |
-| VSP-02 | Synced data shall include: VM name, VM ID, datastore, CPU, memory, disk, power state, guest OS, VMware Tools status | High |
+| VSP-02 | Synced data shall include: VM name, CPU, memory, power state, guest OS, VMware Tools status, IP addresses | High |
 | VSP-03 | The system shall record the timestamp of the last successful sync per VM | Medium |
 | VSP-04 | If a VM no longer exists in vSphere, its record shall be flagged or removed | Medium |
 | VSP-05 | Sync errors shall be logged with sufficient detail for troubleshooting | High |

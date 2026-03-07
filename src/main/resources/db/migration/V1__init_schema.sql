@@ -31,15 +31,11 @@ CREATE TABLE inventory (
 -- ------------------------------------------------------------
 CREATE TABLE vsphere (
     hostname        TEXT    NOT NULL,
-    fqdn            TEXT,
     vm_name         TEXT    NOT NULL,
-    vm_id           TEXT    NOT NULL,
-    datastore       TEXT,
     cpu_count       INTEGER,
     cpu_cores       INTEGER,
     memory_mb       INTEGER,
     memory_gb       INTEGER,
-    disk_gb         INTEGER,
     power_state     TEXT    CHECK (power_state  IN ('poweredOn', 'poweredOff', 'suspended')),
     guest_os        TEXT,
     tools_status    TEXT    CHECK (tools_status IN ('toolsOk', 'toolsOld', 'toolsNotRunning', 'toolsNotInstalled')),
@@ -48,8 +44,7 @@ CREATE TABLE vsphere (
     last_synced_at  TEXT,
     created_at      TEXT    NOT NULL,
     updated_at      TEXT    NOT NULL,
-    PRIMARY KEY (hostname),
-    UNIQUE (vm_id)
+    PRIMARY KEY (hostname)
 );
 
 -- ------------------------------------------------------------

@@ -16,17 +16,8 @@ public class Vsphere {
     @Column(name = "hostname", nullable = false)
     private String hostname;
 
-    @Column(name = "fqdn")
-    private String fqdn;
-
     @Column(name = "vm_name", nullable = false)
     private String vmName;
-
-    @Column(name = "vm_id", nullable = false, unique = true)
-    private String vmId;
-
-    @Column(name = "datastore")
-    private String datastore;
 
     @Column(name = "cpu_count")
     private Integer cpuCount;
@@ -39,9 +30,6 @@ public class Vsphere {
 
     @Column(name = "memory_gb")
     private Integer memoryGb;
-
-    @Column(name = "disk_gb")
-    private Integer diskGb;
 
     @Column(name = "power_state")
     private String powerState;

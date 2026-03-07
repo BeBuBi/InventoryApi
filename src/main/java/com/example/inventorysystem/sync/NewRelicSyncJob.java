@@ -12,7 +12,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.scheduling.support.CronExpression;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZonedDateTime;
 
@@ -51,7 +50,6 @@ public class NewRelicSyncJob {
         }
     }
 
-    @Transactional
     public void runSync() {
         syncStatusService.markRunning(SERVICE);
         log.info("New Relic sync started");
@@ -61,7 +59,11 @@ public class NewRelicSyncJob {
                 try {
                     var hosts = newRelicApiClient.fetchAllHosts(String.valueOf(cred.getId()));
                     for (HostData host : hosts) {
-                        if (host != null) upsert(host);
+                        if (host != null) try {
+                            upsert(host);
+                        } catch (Exception e) {
+                            log.error("Failed to upsert host {}: {}", host.hostname(), e.getMessage());
+                        }
                     }
                 } catch (Exception e) {
                     log.error("New Relic sync failed for credential {}: {}", cred.getName(), e.getMessage());

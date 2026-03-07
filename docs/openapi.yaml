@@ -401,7 +401,7 @@ paths:
                 summary: vSphere credential
                 value:
                   service: vsphere
-                  name: Production vCenter
+                  name: Name|AccountId
                   config:
                     host: vcenter.corp.example.com
                     username: admin@vsphere.local
@@ -1055,7 +1055,7 @@ components:
           example: vsphere
         name:
           type: string
-          example: Production vCenter
+          example: Name|AccountId
         config:
           description: Sensitive fields are masked — passwords and API keys are never returned in plain text.
           oneOf:
@@ -1108,7 +1108,7 @@ components:
           example: vsphere
         name:
           type: string
-          example: Production vCenter
+          example: Name|AccountId
         config:
           description: Plain-text config — encrypted with AES-256 before storage.
           oneOf:
@@ -1120,7 +1120,7 @@ components:
       properties:
         name:
           type: string
-          example: Production vCenter
+          example: Name|AccountId
         config:
           oneOf:
             - $ref: '#/components/schemas/VsphereConfig'

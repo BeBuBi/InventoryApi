@@ -185,7 +185,7 @@ Stores encrypted connection credentials for vSphere and New Relic accounts. Supp
 |------------|---------|-------------------------|----------------------------------------------|
 | id         | INTEGER | PK, AUTOINCREMENT       | Unique identifier                            |
 | service    | TEXT    | NOT NULL                | `vsphere` or `newrelic`                      |
-| name       | TEXT    | NOT NULL                | User-defined label e.g. `Production vCenter` |
+| name       | TEXT    | NOT NULL                | User-defined label e.g. `Name|AccountId` |
 | config     | TEXT    | NOT NULL                | AES-256 encrypted JSON (see structure below) |
 | enabled    | INTEGER | NOT NULL DEFAULT 1      | `1` = used by sync job, `0` = disabled       |
 | created_at | TEXT    | NOT NULL                | Record creation time (ISO 8601 UTC)          |
@@ -223,7 +223,7 @@ For `newrelic`:
 
 | id | service  | name               | enabled |
 |----|----------|--------------------|---------|
-| 1  | vsphere  | Production vCenter | 1       |
+| 1  | vsphere  | Name|AccountId | 1       |
 | 2  | vsphere  | DR vCenter         | 0       |
 | 3  | newrelic | Production Account | 1       |
 | 4  | newrelic | Dev Account        | 1       |

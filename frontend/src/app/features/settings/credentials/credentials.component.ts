@@ -35,7 +35,7 @@ import { Credential, CredentialRequest } from '../../../core/models/credential.m
       <div class="bg-white rounded-lg shadow p-4 mb-6">
         <h2 class="text-sm font-semibold text-gray-700 mb-3">Add Credential</h2>
         <div class="flex gap-3 mb-3">
-          <input [(ngModel)]="newName" placeholder="Name (e.g. Production vCenter)"
+          <input [(ngModel)]="newName" placeholder="Name (e.g. Name|AccountId)"
                  class="border border-gray-300 rounded px-3 py-2 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-blue-500" />
 
           <!-- vSphere fields -->
@@ -63,11 +63,6 @@ import { Credential, CredentialRequest } from '../../../core/models/credential.m
               <input [(ngModel)]="cmdbTokenUrl" placeholder="https://your-instance.service-now.com/oauth_token.do"
                      class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
-            <div class="flex flex-col gap-1">
-              <label class="text-xs font-medium text-gray-500">Data API URL</label>
-              <input [(ngModel)]="cmdbApiUrl" placeholder="https://your-instance.service-now.com/api/xci/cmdb_asset/getAssetDetails"
-                     class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
             <input [(ngModel)]="cmdbClientId" placeholder="Client ID"
                    class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             <input [(ngModel)]="cmdbClientSecret" type="password" placeholder="Client Secret"
@@ -76,6 +71,11 @@ import { Credential, CredentialRequest } from '../../../core/models/credential.m
                    class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             <input [(ngModel)]="cmdbPassword" type="password" placeholder="Password"
                    class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium text-gray-500">Data API URL</label>
+              <input [(ngModel)]="cmdbApiUrl" placeholder="https://your-instance.service-now.com/api/xci/cmdb_asset/getAssetDetails"
+                     class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
           </div>
         </div>
         <button (click)="addCredential()"

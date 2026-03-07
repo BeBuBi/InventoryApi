@@ -10,7 +10,7 @@ import lombok.Setter;
 public class CredentialRequest {
 
     @NotBlank
-    @Pattern(regexp = "vsphere|newrelic")
+    @Pattern(regexp = "vsphere|newrelic|cmdb")
     private String service;
 
     @NotBlank

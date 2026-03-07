@@ -214,7 +214,7 @@ CREATE TABLE credentials (
 |--------|------|----------|---------|-------------|
 | `id` | INTEGER | NO | autoincrement | Surrogate primary key |
 | `service` | TEXT | NO | — | `vsphere` or `newrelic` |
-| `name` | TEXT | NO | — | User-defined label e.g. `Production vCenter` |
+| `name` | TEXT | NO | — | User-defined label e.g. `Name|AccountId` |
 | `config` | TEXT | NO | — | AES-256 encrypted JSON (see structure below) |
 | `enabled` | INTEGER | NO | `1` | `1` = used by sync job, `0` = disabled |
 | `created_at` | TEXT | NO | — | Record creation time (ISO 8601 UTC) |

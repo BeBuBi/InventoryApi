@@ -41,7 +41,8 @@ public class CmdbController {
         if (syncStatusService.isRunning("cmdb")) {
             throw new SyncAlreadyRunningException("cmdb");
         }
-        cmdbSyncJob.runSync();
+        syncStatusService.markRunning("cmdb");
+        new Thread(cmdbSyncJob::runSync).start();
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .body(syncStatusService.getStatus("cmdb"));
     }

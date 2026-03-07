@@ -52,7 +52,8 @@ public class NewRelicController {
         if (syncStatusService.isRunning("newrelic")) {
             throw new SyncAlreadyRunningException("newrelic");
         }
-        newRelicSyncJob.runSync();
+        syncStatusService.markRunning("newrelic");
+        new Thread(newRelicSyncJob::runSync).start();
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .body(syncStatusService.getStatus("newrelic"));
     }

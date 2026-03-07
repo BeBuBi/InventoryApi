@@ -40,7 +40,8 @@ public class VsphereController {
         if (syncStatusService.isRunning("vsphere")) {
             throw new SyncAlreadyRunningException("vsphere");
         }
-        vsphereSyncJob.runSync();
+        syncStatusService.markRunning("vsphere");
+        new Thread(vsphereSyncJob::runSync).start();
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .body(syncStatusService.getStatus("vsphere"));
     }

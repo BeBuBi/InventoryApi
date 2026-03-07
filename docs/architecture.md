@@ -333,7 +333,7 @@ vSphere and New Relic connection credentials are stored in a `credentials` table
 CREATE TABLE credentials (
     id          INTEGER     PRIMARY KEY AUTOINCREMENT,
     service     TEXT        NOT NULL,             -- 'vsphere' or 'newrelic'
-    name        TEXT        NOT NULL,             -- user-defined label e.g. 'Production vCenter'
+    name        TEXT        NOT NULL,             -- user-defined label e.g. 'Name|AccountId'
     config      TEXT        NOT NULL,             -- AES-256 encrypted JSON
     enabled     INTEGER     NOT NULL DEFAULT 1,   -- 1 = enabled, 0 = disabled
     created_at  DATETIME    NOT NULL DEFAULT (datetime('now')),
@@ -368,7 +368,7 @@ For New Relic:
 
 | id | service   | name                    | enabled | config (encrypted) |
 |----|-----------|-------------------------|---------|--------------------|
-| 1  | vsphere   | Production vCenter      | 1       | xxxxxxxx           |
+| 1  | vsphere   | Name|AccountId      | 1       | xxxxxxxx           |
 | 2  | vsphere   | DR vCenter              | 0       | xxxxxxxx           |
 | 3  | newrelic  | Production Account      | 1       | xxxxxxxx           |
 | 4  | newrelic  | Dev Account             | 1       | xxxxxxxx           |
@@ -526,7 +526,7 @@ env:
 **Credential flow:**
 ```
 1. Admin opens /settings/credentials in React UI
-2. Admin creates a new credential entry (e.g. "Production vCenter")
+2. Admin creates a new credential entry (e.g. "Name|AccountId")
 3. Admin enters service type, name, host/username/password or API key
 4. Admin sets enabled = true or false
 5. React calls POST /api/credentials to Backend Service

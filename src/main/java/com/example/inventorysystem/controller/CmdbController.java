@@ -1,0 +1,53 @@
+package com.example.inventorysystem.controller;
+
+import com.example.inventorysystem.dto.CmdbResponse;
+import com.example.inventorysystem.dto.PagedResponse;
+import com.example.inventorysystem.dto.SyncStatusResponse;
+import com.example.inventorysystem.exception.SyncAlreadyRunningException;
+import com.example.inventorysystem.service.CmdbService;
+import com.example.inventorysystem.service.SyncStatusService;
+import com.example.inventorysystem.sync.CmdbSyncJob;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/cmdb")
+@RequiredArgsConstructor
+public class CmdbController {
+
+    private final CmdbService cmdbService;
+    private final SyncStatusService syncStatusService;
+    private final CmdbSyncJob cmdbSyncJob;
+
+    @GetMapping
+    public PagedResponse<CmdbResponse> list(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String os,
+            @RequestParam(required = false) String environment,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return cmdbService.list(search, os, environment, page, size);
+    }
+
+    @GetMapping("/{hostname}")
+    public CmdbResponse getByHostname(@PathVariable String hostname) {
+        return cmdbService.getByHostname(hostname);
+    }
+
+    @PostMapping("/sync")
+    public ResponseEntity<SyncStatusResponse> triggerSync() {
+        if (syncStatusService.isRunning("cmdb")) {
+            throw new SyncAlreadyRunningException("cmdb");
+        }
+        cmdbSyncJob.runSync();
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(syncStatusService.getStatus("cmdb"));
+    }
+
+    @GetMapping("/sync/status")
+    public SyncStatusResponse getSyncStatus() {
+        return syncStatusService.getStatus("cmdb");
+    }
+}

@@ -7,6 +7,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ScheduleService } from '../../../core/services/schedule.service';
 import { VsphereService } from '../../../core/services/vsphere.service';
 import { NewRelicService } from '../../../core/services/newrelic.service';
+import { CmdbService } from '../../../core/services/cmdb.service';
 import { SyncSchedule, SyncScheduleRequest, SyncStatus } from '../../../core/models/sync-schedule.model';
 
 @Component({
@@ -23,7 +24,7 @@ import { SyncSchedule, SyncScheduleRequest, SyncStatus } from '../../../core/mod
           <!-- Card header: service name + enabled badge + enable/disable toggle -->
           <div class="flex items-center justify-between mb-4">
             <h2 class="text-lg font-semibold text-gray-700">
-              {{ schedule.service === 'vsphere' ? 'vSphere' : 'New Relic' }}
+              {{ schedule.service === 'vsphere' ? 'vSphere' : schedule.service === 'newrelic' ? 'New Relic' : 'CMDB' }}
             </h2>
             <div class="flex items-center gap-3">
               <span [class]="schedule.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'"
@@ -43,7 +44,7 @@ import { SyncSchedule, SyncScheduleRequest, SyncStatus } from '../../../core/mod
               (click)="triggerSync(schedule.service)"
               [disabled]="getSyncStatus(schedule.service)?.status === 'running'"
               class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
-              [attr.aria-label]="'Trigger manual sync for ' + (schedule.service === 'vsphere' ? 'vSphere' : 'New Relic')"
+              [attr.aria-label]="'Trigger manual sync for ' + (schedule.service === 'vsphere' ? 'vSphere' : schedule.service === 'newrelic' ? 'New Relic' : 'CMDB')"
             >
               <!-- Spinner icon while running -->
               <svg *ngIf="getSyncStatus(schedule.service)?.status === 'running'"
@@ -139,6 +140,7 @@ export class ScheduleComponent implements OnInit {
   private scheduleService = inject(ScheduleService);
   private vsphereService  = inject(VsphereService);
   private newRelicService = inject(NewRelicService);
+  private cmdbService     = inject(CmdbService);
   private destroyRef      = inject(DestroyRef);
 
   schedules: SyncSchedule[] = [];
@@ -220,7 +222,7 @@ export class ScheduleComponent implements OnInit {
     }
   }
 
-  /** Fetch latest status for both services on component init. */
+  /** Fetch latest status for all services on component init. */
   private loadSyncStatuses(): void {
     this.vsphereService.getSyncStatus()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -229,6 +231,10 @@ export class ScheduleComponent implements OnInit {
     this.newRelicService.getSyncStatus()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(s => this.syncStatuses['newrelic'] = s);
+
+    this.cmdbService.getSyncStatus()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(s => this.syncStatuses['cmdb'] = s);
   }
 
   // ── Manual sync trigger ────────────────────────────────────────────────────
@@ -236,7 +242,9 @@ export class ScheduleComponent implements OnInit {
   triggerSync(service: string): void {
     const trigger$ = service === 'vsphere'
       ? this.vsphereService.triggerSync()
-      : this.newRelicService.triggerSync();
+      : service === 'newrelic'
+        ? this.newRelicService.triggerSync()
+        : this.cmdbService.triggerSync();
 
     trigger$
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -272,7 +280,9 @@ export class ScheduleComponent implements OnInit {
 
     const status$ = service === 'vsphere'
       ? this.vsphereService.getSyncStatus()
-      : this.newRelicService.getSyncStatus();
+      : service === 'newrelic'
+        ? this.newRelicService.getSyncStatus()
+        : this.cmdbService.getSyncStatus();
 
     interval(3000)
       .pipe(

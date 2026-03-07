@@ -32,6 +32,12 @@ import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
               New Relic
             </a>
           </li>
+          <li>
+            <a routerLink="/cmdb" routerLinkActive="bg-gray-700"
+               class="flex items-center px-6 py-2 text-sm hover:bg-gray-700 rounded mx-2 transition-colors">
+              CMDB
+            </a>
+          </li>
           <li class="pt-4 px-6 text-xs text-gray-500 uppercase tracking-wider">Settings</li>
           <li>
             <a routerLink="/settings/credentials" routerLinkActive="bg-gray-700"

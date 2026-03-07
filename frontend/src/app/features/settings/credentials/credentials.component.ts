@@ -24,6 +24,11 @@ import { Credential, CredentialRequest } from '../../../core/models/credential.m
                 class="px-4 py-2 text-sm rounded border border-gray-300 hover:bg-gray-50">
           New Relic
         </button>
+        <button (click)="selectService('cmdb')" [class.bg-blue-600]="activeService==='cmdb'"
+                [class.text-white]="activeService==='cmdb'"
+                class="px-4 py-2 text-sm rounded border border-gray-300 hover:bg-gray-50">
+          CMDB
+        </button>
       </div>
 
       <!-- Add new form -->
@@ -48,6 +53,18 @@ import { Credential, CredentialRequest } from '../../../core/models/credential.m
             <input [(ngModel)]="nrAccountId" placeholder="Account ID (e.g. 1234567)"
                    class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             <input [(ngModel)]="nrApiKey" placeholder="API Key (e.g. NRAK-...)"
+                   class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+
+          <!-- CMDB (ServiceNow) fields -->
+          <div *ngIf="activeService === 'cmdb'" class="flex flex-col gap-2 flex-1">
+            <input [(ngModel)]="cmdbClientId" placeholder="Client ID"
+                   class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input [(ngModel)]="cmdbClientSecret" type="password" placeholder="Client Secret"
+                   class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input [(ngModel)]="cmdbUsername" placeholder="Username"
+                   class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input [(ngModel)]="cmdbPassword" type="password" placeholder="Password"
                    class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
         </div>
@@ -80,6 +97,9 @@ import { Credential, CredentialRequest } from '../../../core/models/credential.m
                 <span *ngIf="activeService === 'vsphere'">
                   <span class="text-gray-400">Host:</span> {{ cred.config?.['host'] || '—' }}
                 </span>
+                <span *ngIf="activeService === 'cmdb'">
+                  <span class="text-gray-400">Username:</span> {{ cred.config?.['username'] || '—' }}
+                </span>
               </td>
               <td class="px-4 py-3">
                 <span [class]="cred.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'"
@@ -110,7 +130,7 @@ export class CredentialsComponent implements OnInit {
   private credentialService = inject(CredentialService);
 
   credentials: Credential[] = [];
-  activeService: 'vsphere' | 'newrelic' = 'vsphere';
+  activeService: 'vsphere' | 'newrelic' | 'cmdb' = 'vsphere';
   newName = '';
   errorMsg = '';
 
@@ -123,11 +143,17 @@ export class CredentialsComponent implements OnInit {
   nrApiKey = '';
   nrAccountId = '';
 
+  // CMDB (ServiceNow) fields
+  cmdbClientId = '';
+  cmdbClientSecret = '';
+  cmdbUsername = '';
+  cmdbPassword = '';
+
   ngOnInit(): void {
     this.loadCredentials();
   }
 
-  selectService(service: 'vsphere' | 'newrelic'): void {
+  selectService(service: 'vsphere' | 'newrelic' | 'cmdb'): void {
     this.activeService = service;
     this.clearForm();
     this.loadCredentials();
@@ -137,6 +163,7 @@ export class CredentialsComponent implements OnInit {
     this.newName = '';
     this.vsHost = ''; this.vsUsername = ''; this.vsPassword = '';
     this.nrApiKey = ''; this.nrAccountId = '';
+    this.cmdbClientId = ''; this.cmdbClientSecret = ''; this.cmdbUsername = ''; this.cmdbPassword = '';
     this.errorMsg = '';
   }
 
@@ -144,13 +171,22 @@ export class CredentialsComponent implements OnInit {
     if (this.activeService === 'vsphere') {
       return JSON.stringify({ host: this.vsHost.trim(), username: this.vsUsername.trim(), password: this.vsPassword });
     }
-    return JSON.stringify({ apiKey: this.nrApiKey.trim(), accountId: this.nrAccountId.trim() });
+    if (this.activeService === 'newrelic') {
+      return JSON.stringify({ apiKey: this.nrApiKey.trim(), accountId: this.nrAccountId.trim() });
+    }
+    return JSON.stringify({
+      client_id:     this.cmdbClientId.trim(),
+      client_secret: this.cmdbClientSecret,
+      username:      this.cmdbUsername.trim(),
+      password:      this.cmdbPassword
+    });
   }
 
   private isFormValid(): boolean {
     if (!this.newName.trim()) return false;
     if (this.activeService === 'vsphere') return !!(this.vsHost.trim() && this.vsUsername.trim() && this.vsPassword);
-    return !!(this.nrApiKey.trim() && this.nrAccountId.trim());
+    if (this.activeService === 'newrelic') return !!(this.nrApiKey.trim() && this.nrAccountId.trim());
+    return !!(this.cmdbClientId.trim() && this.cmdbClientSecret && this.cmdbUsername.trim() && this.cmdbPassword);
   }
 
   loadCredentials(): void {

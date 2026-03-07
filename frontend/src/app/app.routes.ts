@@ -27,6 +27,11 @@ export const routes: Routes = [
       import('./features/newrelic/newrelic-list.component').then(m => m.NewRelicListComponent)
   },
   {
+    path: 'cmdb',
+    loadComponent: () =>
+      import('./features/cmdb/cmdb-list.component').then(m => m.CmdbListComponent)
+  },
+  {
     path: 'settings/credentials',
     loadComponent: () =>
       import('./features/settings/credentials/credentials.component').then(m => m.CredentialsComponent)

@@ -189,7 +189,6 @@ export class VsphereListComponent implements OnInit {
     { key: 'vmName',       label: 'VM Name',      visible: false },
     { key: 'vmId',         label: 'VM ID',        visible: false },
     { key: 'fqdn',         label: 'FQDN',         visible: false },
-    { key: 'datacenter',   label: 'Datacenter',   visible: false },
     { key: 'datastore',    label: 'Datastore',    visible: false },
     { key: 'memoryMb',     label: 'Memory (MB)',  visible: false },
     { key: 'diskGb',       label: 'Disk (GB)',    visible: false },

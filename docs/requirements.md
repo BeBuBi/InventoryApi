@@ -72,7 +72,7 @@ The **Server Inventory System** is a backend application that consolidates serve
 | ID | Requirement | Priority |
 |----|-------------|----------|
 | VSP-01 | The system shall sync VM data from VMware vSphere on a configurable schedule | High |
-| VSP-02 | Synced data shall include: VM name, VM ID, cluster, datacenter, datastore, CPU, memory, disk, power state, guest OS, VMware Tools status | High |
+| VSP-02 | Synced data shall include: VM name, VM ID, datastore, CPU, memory, disk, power state, guest OS, VMware Tools status | High |
 | VSP-03 | The system shall record the timestamp of the last successful sync per VM | Medium |
 | VSP-04 | If a VM no longer exists in vSphere, its record shall be flagged or removed | Medium |
 | VSP-05 | Sync errors shall be logged with sufficient detail for troubleshooting | High |
@@ -95,7 +95,6 @@ The **Server Inventory System** is a backend application that consolidates serve
 | SCH-02 | Users shall be able to filter by environment (production, staging, dev, dr) | High |
 | SCH-03 | Users shall be able to filter by status (active, maintenance, decommissioned, unknown) | High |
 | SCH-04 | Users shall be able to filter by alert status from New Relic | Medium |
-| SCH-06 | Users shall be able to filter by vSphere cluster or datacenter | Low |
 | SCH-07 | Search and filter results shall be paginated | High |
 
 ### 4.5 REST API

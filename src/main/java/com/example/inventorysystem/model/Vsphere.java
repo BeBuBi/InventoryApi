@@ -25,9 +25,6 @@ public class Vsphere {
     @Column(name = "vm_id", nullable = false, unique = true)
     private String vmId;
 
-    @Column(name = "datacenter")
-    private String datacenter;
-
     @Column(name = "datastore")
     private String datastore;
 

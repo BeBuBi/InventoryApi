@@ -75,11 +75,6 @@ paths:
           schema:
             type: string
             enum: [server, vm, container, network]
-        - name: datacenter
-          in: query
-          description: Filter by vSphere datacenter name
-          schema:
-            type: string
       responses:
         '200':
           description: Paginated list of assets
@@ -859,10 +854,6 @@ components:
           type: string
           description: vSphere managed object ID (moId)
           example: vm-1042
-        datacenter:
-          type: string
-          nullable: true
-          example: DC1
         datastore:
           type: string
           nullable: true

@@ -116,7 +116,6 @@ CREATE TABLE vsphere (
     vm_name         TEXT    NOT NULL,
     vm_id           TEXT    NOT NULL,
     cluster         TEXT,
-    datacenter      TEXT,
     datastore       TEXT,
     cpu_count       INTEGER,
     cpu_cores       INTEGER,
@@ -143,7 +142,6 @@ CREATE TABLE vsphere (
 | `vm_name` | TEXT | NO | — | VM display name in vSphere |
 | `vm_id` | TEXT | NO | — | vSphere managed object ID (moId) — must be unique |
 | `cluster` | TEXT | YES | — | vSphere cluster name |
-| `datacenter` | TEXT | YES | — | vSphere datacenter name |
 | `datastore` | TEXT | YES | — | Assigned datastore |
 | `cpu_count` | INTEGER | YES | — | Number of vCPUs |
 | `cpu_cores` | INTEGER | YES | — | Number of physical CPU cores |

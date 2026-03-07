@@ -3,7 +3,6 @@ export interface VsphereRecord {
   fqdn?: string;
   vmName: string;
   vmId: string;
-  datacenter?: string;
   datastore?: string;
   cpuCount?: number;
   cpuCores?: number;

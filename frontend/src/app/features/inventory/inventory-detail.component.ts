@@ -62,7 +62,6 @@ import { AssetDetail } from '../../core/models/inventory.model';
               <div><dt class="text-gray-500">VM ID</dt><dd class="font-medium font-mono text-xs">{{ detail.vsphere.vmId }}</dd></div>
               <div><dt class="text-gray-500">Power State</dt><dd class="font-medium">{{ detail.vsphere.powerState || '—' }}</dd></div>
               <div><dt class="text-gray-500">Guest OS</dt><dd class="font-medium">{{ detail.vsphere.guestOs || '—' }}</dd></div>
-              <div><dt class="text-gray-500">Datacenter</dt><dd class="font-medium">{{ detail.vsphere.datacenter || '—' }}</dd></div>
               <div><dt class="text-gray-500">CPU</dt><dd class="font-medium">{{ detail.vsphere.cpuCount ?? '—' }} vCPU</dd></div>
               <div><dt class="text-gray-500">Memory</dt><dd class="font-medium">{{ detail.vsphere.memoryGb ?? '—' }} GB</dd></div>
               <div><dt class="text-gray-500">Disk</dt><dd class="font-medium">{{ detail.vsphere.diskGb ?? '—' }} GB</dd></div>

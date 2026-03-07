@@ -93,7 +93,6 @@ public class VsphereSyncJob {
         entity.setFqdn(vm.fqdn());
         entity.setVmName(vm.vmName());
         entity.setVmId(vm.vmId());
-        entity.setDatacenter(vm.datacenter());
         entity.setDatastore(vm.datastore());
         entity.setCpuCount(vm.cpuCount());
         entity.setCpuCores(vm.cpuCores());

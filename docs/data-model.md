@@ -46,20 +46,18 @@ The data model consists of five tables stored in a single SQLite database file (
 │ ip_address              │     │ fqdn                     │
 │ asset_type              │     │ vm_name                  │
 │ environment             │     │ vm_id                    │
-│ owner                   │     │ cluster                  │
-│ location                │     │ datacenter               │
-│ status                  │     │ datastore                │
-│ warranty_expiry         │     │ cpu_count                │
-│ last_patched_at         │     │ cpu_cores                │
-│ created_at              │     │ memory_mb                │
-│ updated_at              │     │ memory_gb                │
-└─────────────────────────┘     │ disk_gb                  │
-                                 │ power_state              │
-                                 │ guest_os                 │
-  Correlated by hostname         │ tools_status             │
-  at application layer ─────────│ ipv4_address             │
-                                 │ ipv6_address             │
-                                 │ last_synced_at           │
+│ owner                   │     │ datastore                │
+│ location                │     │ cpu_count                │
+│ status                  │     │ cpu_cores                │
+│ warranty_expiry         │     │ memory_mb                │
+│ last_patched_at         │     │ memory_gb                │
+│ created_at              │     │ disk_gb                  │
+│ updated_at              │     │ power_state              │
+└─────────────────────────┘     │ guest_os                 │
+                                 │ tools_status             │
+                                 │ ipv4_address             │
+  Correlated by hostname         │ ipv6_address             │
+  at application layer ─────────│ last_synced_at           │
                                  │ created_at               │
                                  │ updated_at               │
                                  └─────────────────────────┘
@@ -137,8 +135,6 @@ VMware vSphere VM metadata. Populated by the vSphere sync job. Each record corre
 | fqdn           | TEXT    |                  | Fully qualified domain name                         |
 | vm_name        | TEXT    | NOT NULL         | VM display name in vSphere                          |
 | vm_id          | TEXT    | NOT NULL, UNIQUE | vSphere managed object ID (moId)                    |
-| cluster        | TEXT    |                  | vSphere cluster name                                |
-| datacenter     | TEXT    |                  | vSphere datacenter name                             |
 | datastore      | TEXT    |                  | Assigned datastore                                  |
 | cpu_count      | INTEGER |                  | Number of vCPUs                                     |
 | cpu_cores      | INTEGER |                  | Number of physical CPU cores                        |

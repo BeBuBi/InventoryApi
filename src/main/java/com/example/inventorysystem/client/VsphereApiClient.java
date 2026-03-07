@@ -12,9 +12,7 @@ import org.springframework.web.client.RestClient;
 import javax.net.ssl.*;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 @Slf4j
 @Component
@@ -26,7 +24,7 @@ public class VsphereApiClient {
 
     public record VmData(
             String hostname, String fqdn, String vmName, String vmId,
-            String datacenter, String datastore,
+            String datastore,
             Integer cpuCount, Integer cpuCores,
             Integer memoryMb, Integer memoryGb, Integer diskGb,
             String powerState, String guestOs, String toolsStatus,
@@ -61,9 +59,6 @@ public class VsphereApiClient {
         String sessionToken = objectMapper.readTree(sessionTokenRaw).asText();
         log.info("vSphere session token obtained from {}: length={}", host, sessionToken.length());
 
-        // Pre-fetch datacenter id→name map (MoRef ID → display name)
-        Map<String, String> datacenterNames = buildIdToNameMap(client, sessionToken, "/api/vcenter/datacenter", "datacenter");
-
         // Fetch VM list
         String vmsJson = client.get()
                 .uri("/api/vcenter/vm")
@@ -74,39 +69,14 @@ public class VsphereApiClient {
         List<VmData> result = new ArrayList<>();
         JsonNode vms = objectMapper.readTree(vmsJson);
         for (JsonNode vm : vms) {
-            result.add(mapVm(vm, client, sessionToken, datacenterNames));
+            result.add(mapVm(vm, client, sessionToken));
         }
 
         log.info("vSphere sync: fetched {} VMs from {}", result.size(), host);
         return result;
     }
 
-    /**
-     * Builds a MoRef ID → display name map from a vSphere list endpoint.
-     * Each item in the response array is expected to have an idField (e.g. "datacenter") and a "name" field.
-     */
-    private Map<String, String> buildIdToNameMap(RestClient client, String sessionToken,
-                                                  String uri, String idField) {
-        Map<String, String> map = new HashMap<>();
-        try {
-            String json = client.get()
-                    .uri(uri)
-                    .header("vmware-api-session-id", sessionToken)
-                    .retrieve()
-                    .body(String.class);
-            for (JsonNode item : objectMapper.readTree(json)) {
-                String id = item.path(idField).asText(null);
-                String name = item.path("name").asText(null);
-                if (id != null && name != null) map.put(id, name);
-            }
-        } catch (Exception e) {
-            log.warn("Failed to fetch {} name map: {}", idField, e.getMessage());
-        }
-        return map;
-    }
-
-    private VmData mapVm(JsonNode vm, RestClient client, String sessionToken,
-                         Map<String, String> datacenterNames) {
+    private VmData mapVm(JsonNode vm, RestClient client, String sessionToken) {
         String vmId = vm.path("vm").asText();
         String vmName = vm.path("name").asText();
         String powerState = normalizePowerState(vm.path("power_state").asText(null));
@@ -120,11 +90,6 @@ public class VsphereApiClient {
                     .body(String.class);
 
             JsonNode detail = objectMapper.readTree(detailJson);
-            JsonNode placement = detail.path("placement");
-
-            // Resolve datacenter name from placement MoRef ID
-            String datacenterName = datacenterNames.get(placement.path("datacenter").asText(null));
-
             // Guest hostname from identity endpoint (separate call in vSphere 8.x)
             String guestHostname = fetchGuestHostname(client, sessionToken, vmId);
             String fqdn = (guestHostname != null && guestHostname.contains(".")) ? guestHostname : null;
@@ -155,13 +120,13 @@ public class VsphereApiClient {
             String ipv6 = ips[1];
 
             return new VmData(hostname, fqdn, vmName, vmId,
-                    datacenterName, datastore,
+                    datastore,
                     cpuCount, cpuCores, memoryMb, memoryGb, diskGb,
                     powerState, guestOs, toolsStatus, ipv4, ipv6);
         } catch (Exception e) {
             log.warn("Failed to fetch details for VM {}: {}", vmId, e.getMessage());
             return new VmData(vmName.toLowerCase(), null, vmName, vmId,
-                    null, null,
+                    null,
                     null, null, null, null, null, powerState, null, null, null, null);
         }
     }

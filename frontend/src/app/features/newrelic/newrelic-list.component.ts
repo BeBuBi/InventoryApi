@@ -6,7 +6,6 @@ import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
 import { NewRelicService } from '../../core/services/newrelic.service';
 import { NewRelicRecord } from '../../core/models/newrelic.model';
-import { SyncStatus } from '../../core/models/sync-schedule.model';
 
 interface ColumnDef {
   key: keyof NewRelicRecord;
@@ -37,15 +36,6 @@ const IP_COLS      = new Set<keyof NewRelicRecord>(['ipv4Address', 'ipv6Address'
     <div class="p-6">
       <div class="flex items-center justify-between mb-6">
         <h1 class="text-2xl font-bold text-gray-800">New Relic Hosts</h1>
-        <div class="flex items-center gap-3">
-          <span *ngIf="syncStatus" [class]="syncStatusClass(syncStatus.status)"
-                class="text-xs font-medium px-2 py-1 rounded">{{ syncStatus.status }}</span>
-          <button (click)="triggerSync()"
-                  class="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
-                  [disabled]="syncStatus?.status === 'running'">
-            Sync Now
-          </button>
-        </div>
       </div>
 
       <!-- Filters + Column Picker toggle -->
@@ -185,7 +175,6 @@ export class NewRelicListComponent implements OnInit {
   visibleColumns: ColumnDef[] = [];
   environments: string[] = [];
   accountIds: string[] = [];
-  syncStatus?: SyncStatus;
   totalElements = 0;
   totalPages = 0;
   currentPage = 0;
@@ -242,7 +231,6 @@ export class NewRelicListComponent implements OnInit {
       });
 
     this.loadImmediate();
-    this.loadSyncStatus();
 
     this.newRelicService.getEnvironments()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -278,21 +266,6 @@ export class NewRelicListComponent implements OnInit {
 
   onFilter(): void { this.currentPage = 0; this.loadImmediate(); }
   onPageSizeChange(): void { this.currentPage = 0; this.loadImmediate(); }
-
-  loadSyncStatus(): void {
-    this.newRelicService.getSyncStatus()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(s => this.syncStatus = s);
-  }
-
-  triggerSync(): void {
-    this.newRelicService.triggerSync()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(s => {
-        this.syncStatus = s;
-        setTimeout(() => this.loadSyncStatus(), 3000);
-      });
-  }
 
   prevPage(): void { this.currentPage--; this.loadImmediate(); }
   nextPage(): void { this.currentPage++; this.loadImmediate(); }
@@ -365,8 +338,4 @@ export class NewRelicListComponent implements OnInit {
     return parts.join(', ');
   }
 
-  syncStatusClass(status: string): string {
-    return { running: 'bg-blue-100 text-blue-800', success: 'bg-green-100 text-green-800',
-      failed: 'bg-red-100 text-red-800', idle: 'bg-gray-100 text-gray-600' }[status] ?? '';
-  }
 }

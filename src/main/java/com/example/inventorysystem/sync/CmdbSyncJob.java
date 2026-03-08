@@ -83,10 +83,6 @@ public class CmdbSyncJob {
         Cmdb entity = cmdbRepository.findById(asset.hostname()).orElse(new Cmdb());
         entity.setHostname(asset.hostname());
         entity.setSysId(asset.sysId());
-        entity.setAssetTag(asset.assetTag());
-        entity.setSerialNumber(asset.serialNumber());
-        entity.setManufacturer(asset.manufacturer());
-        entity.setModelName(asset.modelName());
         entity.setOs(asset.os());
         entity.setOsVersion(asset.osVersion());
         entity.setIpAddress(asset.ipAddress());

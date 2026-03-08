@@ -29,6 +29,8 @@ tags:
     description: New Relic agent records and sync control
   - name: Credentials
     description: Encrypted connection credentials for vSphere and New Relic
+  - name: CMDB
+    description: CMDB configuration item records synced from ServiceNow
   - name: Schedule
     description: Sync schedule configuration per service
 
@@ -359,6 +361,66 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ------------------------------------------------------------
+  # CMDB
+  # ------------------------------------------------------------
+  /api/cmdb:
+    get:
+      tags: [CMDB]
+      summary: List CMDB records
+      operationId: listCmdb
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - name: hostname
+          in: query
+          description: Partial hostname match (case-insensitive)
+          required: false
+          schema:
+            type: string
+          example: web-prod
+        - name: operationalStatus
+          in: query
+          description: Filter by operational status
+          required: false
+          schema:
+            type: string
+          example: operational
+      responses:
+        '200':
+          description: Paginated list of CMDB records
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbRecordPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/cmdb/operational-statuses:
+    get:
+      tags: [CMDB]
+      summary: List distinct operational statuses
+      description: Returns a list of all distinct operational status values present in the CMDB table.
+      operationId: listCmdbOperationalStatuses
+      responses:
+        '200':
+          description: List of distinct operational status values
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                example: [operational, non-operational, retired]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -1041,6 +1103,83 @@ components:
         total_pages:
           type: integer
           example: 5
+
+    # -- CMDB --
+    CmdbResponse:
+      type: object
+      properties:
+        hostname:
+          type: string
+          example: web-prod-01
+        sys_id:
+          type: string
+          nullable: true
+          example: abc123def456
+        os:
+          type: string
+          nullable: true
+          example: "Red Hat Enterprise Linux"
+        os_version:
+          type: string
+          nullable: true
+          example: "8.7"
+        ip_address:
+          type: string
+          nullable: true
+          example: 10.0.1.50
+        location:
+          type: string
+          nullable: true
+          example: dc1-rack-12
+        department:
+          type: string
+          nullable: true
+          example: platform-engineering
+        environment:
+          type: string
+          nullable: true
+          example: production
+        operational_status:
+          type: string
+          nullable: true
+          example: operational
+        classification:
+          type: string
+          nullable: true
+          example: server
+        last_synced_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-03-07T04:00:00Z"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-02-01T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-03-07T04:00:00Z"
+
+    CmdbRecordPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/CmdbResponse'
+        page:
+          type: integer
+          example: 0
+        size:
+          type: integer
+          example: 20
+        total_elements:
+          type: integer
+          example: 210
+        total_pages:
+          type: integer
+          example: 11
 
     # -- Credentials --
     CredentialRecord:

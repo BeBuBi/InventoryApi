@@ -8,10 +8,6 @@ public class CmdbResponse {
 
     private final String hostname;
     private final String sysId;
-    private final String assetTag;
-    private final String serialNumber;
-    private final String manufacturer;
-    private final String modelName;
     private final String os;
     private final String osVersion;
     private final String ipAddress;
@@ -27,10 +23,6 @@ public class CmdbResponse {
     public CmdbResponse(Cmdb c) {
         this.hostname          = c.getHostname();
         this.sysId             = c.getSysId();
-        this.assetTag          = c.getAssetTag();
-        this.serialNumber      = c.getSerialNumber();
-        this.manufacturer      = c.getManufacturer();
-        this.modelName         = c.getModelName();
         this.os                = c.getOs();
         this.osVersion         = c.getOsVersion();
         this.ipAddress         = c.getIpAddress();

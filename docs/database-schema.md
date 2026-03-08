@@ -1,8 +1,8 @@
 # Database Schema
 ## Server Inventory System
 
-**Version:** 1.1
-**Last Updated:** 2026-03-06
+**Version:** 1.2
+**Last Updated:** 2026-03-07
 **Database:** SQLite 3.x
 **Migration Tool:** Flyway
 
@@ -17,8 +17,9 @@
    - [inventory](#41-inventory)
    - [vsphere](#42-vsphere)
    - [newrelic](#43-newrelic)
-   - [credentials](#44-credentials)
-   - [sync_schedule](#45-sync_schedule)
+   - [cmdb](#44-cmdb)
+   - [credentials](#45-credentials)
+   - [sync_schedule](#46-sync_schedule)
 5. [Seed Data](#5-seed-data)
 6. [Constraints Summary](#6-constraints-summary)
 
@@ -28,7 +29,7 @@
 
 All application data is stored in a single SQLite database file (`inventory.db`). The schema is managed by **Flyway** — all changes must be made through versioned migration files, never by editing the database directly.
 
-The database contains five tables. There are no foreign key constraints between tables by design — each table is populated independently by different sources (manual entry, vSphere sync, New Relic sync). The `hostname` column is the natural join key across `inventory`, `vsphere`, and `newrelic`.
+The database contains six tables. There are no foreign key constraints between tables by design — each table is populated independently by different sources (manual entry, vSphere sync, New Relic sync, CMDB sync). The `hostname` column is the natural join key across `inventory`, `vsphere`, `newrelic`, and `cmdb`.
 
 ---
 
@@ -193,7 +194,48 @@ CREATE TABLE newrelic (
 
 ---
 
-### 4.4 `credentials`
+### 4.4 `cmdb`
+
+CMDB (Configuration Management Database) records. Populated by the CMDB sync job. Each record corresponds to one configuration item in the CMDB, identified by `hostname`.
+
+```sql
+CREATE TABLE cmdb (
+    hostname            TEXT    NOT NULL,
+    sys_id              TEXT,
+    os                  TEXT,
+    os_version          TEXT,
+    ip_address          TEXT,
+    location            TEXT,
+    department          TEXT,
+    environment         TEXT,
+    operational_status  TEXT,
+    classification      TEXT,
+    last_synced_at      TEXT,
+    created_at          TEXT    NOT NULL,
+    updated_at          TEXT    NOT NULL,
+    PRIMARY KEY (hostname)
+);
+```
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `hostname` | TEXT | NO | — | Asset hostname — primary key and join key |
+| `sys_id` | TEXT | YES | — | ServiceNow sys_id for the CI record |
+| `os` | TEXT | YES | — | Operating system name |
+| `os_version` | TEXT | YES | — | Operating system version |
+| `ip_address` | TEXT | YES | — | Primary IP address of the CI |
+| `location` | TEXT | YES | — | Physical or logical location |
+| `department` | TEXT | YES | — | Owning department |
+| `environment` | TEXT | YES | — | Environment (e.g. production, staging) |
+| `operational_status` | TEXT | YES | — | Operational status of the CI (e.g. operational, non-operational) |
+| `classification` | TEXT | YES | — | CI classification |
+| `last_synced_at` | TEXT | YES | — | Last sync timestamp from CMDB (ISO 8601 UTC) |
+| `created_at` | TEXT | NO | — | Record creation time (ISO 8601 UTC) |
+| `updated_at` | TEXT | NO | — | Last update time (ISO 8601 UTC) |
+
+---
+
+### 4.5 `credentials`
 
 Stores AES-256 encrypted connection credentials for vSphere and New Relic accounts. Multiple accounts per service are supported. Managed via the Settings UI.
 
@@ -243,7 +285,7 @@ For `newrelic`:
 
 ---
 
-### 4.5 `sync_schedule`
+### 4.6 `sync_schedule`
 
 One row per service. The sync jobs poll this table every minute and trigger when the current time matches the cron expression.
 
@@ -308,6 +350,8 @@ VALUES
 | `vsphere` | `chk_tools_status` | CHECK | `tools_status IN ('toolsOk','toolsOld','toolsNotRunning','toolsNotInstalled')` |
 | `newrelic` | `PK` | Primary Key | `hostname` |
 | `newrelic` | — | — | Columns sourced from NR NetworkSample; no additional CHECK constraints |
+| `cmdb` | `PK` | Primary Key | `hostname` |
+| `cmdb` | — | — | No additional CHECK constraints; values are sourced from CMDB as-is |
 | `credentials` | `PK` | Primary Key | `id` (autoincrement) |
 | `credentials` | `uq_service_name` | Unique | `(service, name)` |
 | `credentials` | `chk_service` | CHECK | `service IN ('vsphere','newrelic')` |

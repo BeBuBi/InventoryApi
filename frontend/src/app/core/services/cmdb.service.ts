@@ -13,18 +13,20 @@ export class CmdbService {
 
   list(params: {
     search?: string;
-    os?: string;
-    environment?: string;
+    operationalStatus?: string;
     page?: number;
     size?: number;
   }): Observable<PagedResponse<CmdbRecord>> {
     let p = new HttpParams();
     if (params.search) p = p.set('search', params.search);
-    if (params.os) p = p.set('os', params.os);
-    if (params.environment) p = p.set('environment', params.environment);
+    if (params.operationalStatus) p = p.set('operationalStatus', params.operationalStatus);
     p = p.set('page', params.page ?? 0);
     p = p.set('size', params.size ?? 20);
     return this.http.get<PagedResponse<CmdbRecord>>(this.base, { params: p });
+  }
+
+  listOperationalStatuses(): Observable<string[]> {
+    return this.http.get<string[]>(`${this.base}/operational-statuses`);
   }
 
   getByHostname(hostname: string): Observable<CmdbRecord> {

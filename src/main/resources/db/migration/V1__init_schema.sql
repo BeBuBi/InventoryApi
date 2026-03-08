@@ -7,7 +7,7 @@
 -- ------------------------------------------------------------
 -- inventory
 -- Core asset registry. hostname is the natural primary key
--- and the join key across vsphere and newrelic tables.
+-- and the join key across vsphere, newrelic, and cmdb tables.
 -- ------------------------------------------------------------
 CREATE TABLE inventory (
     hostname        TEXT    NOT NULL,
@@ -73,13 +73,35 @@ CREATE TABLE newrelic (
 );
 
 -- ------------------------------------------------------------
+-- cmdb
+-- ServiceNow CMDB asset data. Populated by the CMDB sync job.
+-- Correlated to inventory via hostname.
+-- ------------------------------------------------------------
+CREATE TABLE cmdb (
+    hostname            TEXT    NOT NULL,
+    sys_id              TEXT,
+    os                  TEXT,
+    os_version          TEXT,
+    ip_address          TEXT,
+    location            TEXT,
+    department          TEXT,
+    environment         TEXT,
+    operational_status  TEXT,
+    classification      TEXT,
+    last_synced_at      TEXT,
+    created_at          TEXT    NOT NULL,
+    updated_at          TEXT    NOT NULL,
+    PRIMARY KEY (hostname)
+);
+
+-- ------------------------------------------------------------
 -- credentials
--- AES-256 encrypted connection credentials for vSphere and
--- New Relic accounts. Multiple accounts per service supported.
+-- AES-256 encrypted connection credentials for vSphere,
+-- New Relic, and CMDB accounts. Multiple accounts per service.
 -- ------------------------------------------------------------
 CREATE TABLE credentials (
     id          INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-    service     TEXT    NOT NULL CHECK (service IN ('vsphere', 'newrelic')),
+    service     TEXT    NOT NULL CHECK (service IN ('vsphere', 'newrelic', 'cmdb')),
     name        TEXT    NOT NULL,
     config      TEXT    NOT NULL,
     enabled     INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
@@ -95,7 +117,7 @@ CREATE TABLE credentials (
 -- ------------------------------------------------------------
 CREATE TABLE sync_schedule (
     id          INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-    service     TEXT    NOT NULL CHECK (service IN ('vsphere', 'newrelic')),
+    service     TEXT    NOT NULL CHECK (service IN ('vsphere', 'newrelic', 'cmdb')),
     cron_expr   TEXT    NOT NULL,
     enabled     INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
     description TEXT,
@@ -110,4 +132,5 @@ CREATE TABLE sync_schedule (
 INSERT INTO sync_schedule (service, cron_expr, enabled, description, updated_at)
 VALUES
     ('vsphere',  '0 0 2 * * *',       0, 'Every day at 2:00 AM',  datetime('now')),
-    ('newrelic', '0 0 6 * * MON-FRI', 0, 'Weekdays at 6:00 AM',   datetime('now'));
+    ('newrelic', '0 0 6 * * MON-FRI', 0, 'Weekdays at 6:00 AM',   datetime('now')),
+    ('cmdb',     '0 0 3 * * *',       0, 'Every day at 3:00 AM',  datetime('now'));

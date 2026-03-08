@@ -26,8 +26,7 @@ public class CmdbApiClient {
     private final ObjectMapper objectMapper;
 
     public record AssetData(
-            String hostname, String sysId, String assetTag, String serialNumber,
-            String manufacturer, String modelName, String os, String osVersion,
+            String hostname, String sysId, String os, String osVersion,
             String ipAddress, String location, String department, String environment,
             String operationalStatus, String classification
     ) {}
@@ -107,7 +106,7 @@ public class CmdbApiClient {
 
     private AssetData mapRecord(JsonNode record) {
         // Resolve hostname from multiple candidate fields, strip domain suffix
-        String rawHostname = extractField(record, "name", "u_hostname", "host_name");
+        String rawHostname = extractField(record, "u_ci_name", "name", "u_hostname", "host_name");
         if (rawHostname == null || rawHostname.isBlank()) {
             return null;
         }
@@ -117,22 +116,17 @@ public class CmdbApiClient {
         }
 
         String sysId            = extractField(record, "sys_id");
-        String assetTag         = extractField(record, "asset_tag");
-        String serialNumber     = extractField(record, "serial_number", "serial_no");
-        String manufacturer     = extractField(record, "manufacturer");
-        String modelName        = extractField(record, "model_id", "model_number");
-        String os               = extractField(record, "os", "os_type");
-        String osVersion        = extractField(record, "os_version");
-        String ipAddress        = extractField(record, "ip_address");
+        String os               = extractField(record, "u_server_os", "os_type");
+        String osVersion        = extractField(record, "u_server_os_version", "os_version");
+        String ipAddress        = extractField(record, "u_ci_ip_address", "ip_address");
         String location         = extractField(record, "location");
         String department       = extractField(record, "department");
-        String environment      = extractField(record, "u_environment", "environment");
-        String operationalStatus = extractField(record, "operational_status");
-        String classification   = extractField(record, "classification", "subcategory");
+        String environment      = extractField(record, "u_env_name", "u_environment", "environment");
+        String operationalStatus = extractField(record, "u_ci_install_status", "operational_status");
+        String classification   = extractField(record, "u_ci_sys_class_name", "classification", "subcategory");
 
         return new AssetData(
-                hostname, sysId, assetTag, serialNumber,
-                manufacturer, modelName, os, osVersion,
+                hostname, sysId, os, osVersion,
                 ipAddress, location, department, environment,
                 operationalStatus, classification
         );

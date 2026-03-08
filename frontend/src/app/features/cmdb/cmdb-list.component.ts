@@ -36,15 +36,10 @@ interface CmdbDisplayRow extends CmdbRecord {
       <div class="bg-white rounded-lg shadow p-4 mb-4 flex flex-wrap gap-3 items-center">
         <input [(ngModel)]="search" (ngModelChange)="onSearchChange()" placeholder="Search hostname..."
                class="border border-gray-300 rounded px-3 py-2 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        <select [(ngModel)]="filterOs" (ngModelChange)="onFilter()"
+        <select [(ngModel)]="operationalStatus" (ngModelChange)="onFilter()"
                 class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none">
-          <option value="">All OS</option>
-          <option *ngFor="let o of osList; trackBy: trackByValue" [value]="o">{{ o }}</option>
-        </select>
-        <select [(ngModel)]="filterEnvironment" (ngModelChange)="onFilter()"
-                class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none">
-          <option value="">All Environments</option>
-          <option *ngFor="let env of environments; trackBy: trackByValue" [value]="env">{{ env }}</option>
+          <option value="">All Statuses</option>
+          <option *ngFor="let s of operationalStatuses; trackBy: trackByValue" [value]="s">{{ operationalStatusLabel(s) }}</option>
         </select>
 
         <span class="text-sm text-gray-500">{{ totalElements }} records</span>
@@ -167,15 +162,13 @@ export class CmdbListComponent implements OnInit {
 
   displayItems: CmdbDisplayRow[] = [];
   visibleColumns: ColumnDef[] = [];
-  osList: string[] = [];
-  environments: string[] = [];
+  operationalStatuses: string[] = [];
   totalElements = 0;
   totalPages = 0;
   currentPage = 0;
   pageSize = 20;
   search = '';
-  filterOs = '';
-  filterEnvironment = '';
+  operationalStatus = '';
   showColumnPicker = false;
 
   // Subject that drives debounced search-triggered loads.
@@ -185,16 +178,12 @@ export class CmdbListComponent implements OnInit {
   columns: ColumnDef[] = [
     { key: 'hostname',          label: 'Hostname',          visible: true  },
     { key: 'ipAddress',         label: 'IP Address',        visible: true  },
-    { key: 'manufacturer',      label: 'Manufacturer',      visible: true  },
-    { key: 'modelName',         label: 'Model',             visible: true  },
     { key: 'os',                label: 'OS',                visible: true  },
     { key: 'osVersion',         label: 'OS Version',        visible: true  },
-    { key: 'assetTag',          label: 'Asset Tag',         visible: false },
-    { key: 'serialNumber',      label: 'Serial Number',     visible: false },
     { key: 'location',          label: 'Location',          visible: false },
     { key: 'department',        label: 'Department',        visible: false },
     { key: 'environment',       label: 'Environment',       visible: false },
-    { key: 'operationalStatus', label: 'Op. Status',        visible: false },
+    { key: 'operationalStatus', label: 'Op. Status',        visible: true  },
     { key: 'classification',    label: 'Classification',    visible: false },
     { key: 'lastSyncedAt',      label: 'Last Synced',       visible: false },
   ];
@@ -205,6 +194,11 @@ export class CmdbListComponent implements OnInit {
     // Seed the cached visible-column list before first render.
     this.refreshVisibleColumns();
 
+    // Load the distinct operational statuses for the filter dropdown.
+    this.cmdbService.listOperationalStatuses()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(statuses => { this.operationalStatuses = statuses; });
+
     // Wire up the debounced search pipeline. switchMap cancels any in-flight request
     // before starting a new one. takeUntilDestroyed cleans up when the component is destroyed.
     this.searchTrigger$
@@ -213,8 +207,7 @@ export class CmdbListComponent implements OnInit {
         distinctUntilChanged(),
         switchMap(() => this.cmdbService.list({
           search: this.search,
-          os: this.filterOs,
-          environment: this.filterEnvironment,
+          operationalStatus: this.operationalStatus,
           page: this.currentPage,
           size: this.pageSize
         })),
@@ -224,7 +217,6 @@ export class CmdbListComponent implements OnInit {
         this.totalElements = res.totalElements;
         this.totalPages = res.totalPages;
         this.displayItems = res.content.map(asset => this.toDisplayRow(asset));
-        this.updateFilterOptions(res.content);
       });
 
     this.loadImmediate();
@@ -234,8 +226,7 @@ export class CmdbListComponent implements OnInit {
   loadImmediate(): void {
     this.cmdbService.list({
       search: this.search,
-      os: this.filterOs,
-      environment: this.filterEnvironment,
+      operationalStatus: this.operationalStatus,
       page: this.currentPage,
       size: this.pageSize
     })
@@ -244,7 +235,6 @@ export class CmdbListComponent implements OnInit {
         this.totalElements = res.totalElements;
         this.totalPages = res.totalPages;
         this.displayItems = res.content.map(asset => this.toDisplayRow(asset));
-        this.updateFilterOptions(res.content);
       });
   }
 
@@ -292,7 +282,7 @@ export class CmdbListComponent implements OnInit {
   }
 
   // Convert a raw API record into a display row by precomputing all derived values once.
-  private toDisplayRow(asset: CmdbRecord): CmdbDisplayRow {
+  toDisplayRow(asset: CmdbRecord): CmdbDisplayRow {
     return {
       ...asset,
       _lastSyncedAtFormatted: asset.lastSyncedAt ? new Date(asset.lastSyncedAt).toLocaleString() : '—',
@@ -303,7 +293,7 @@ export class CmdbListComponent implements OnInit {
     };
   }
 
-  private operationalStatusLabel(status?: string): string {
+  operationalStatusLabel(status?: string): string {
     if (!status) return '—';
     switch (status) {
       case '1': return 'Operational';
@@ -315,7 +305,7 @@ export class CmdbListComponent implements OnInit {
     }
   }
 
-  private operationalStatusClass(status?: string): string {
+  operationalStatusClass(status?: string): string {
     switch (status) {
       case '1': return 'bg-green-100 text-green-800';
       case '2': return 'bg-yellow-100 text-yellow-800';
@@ -326,15 +316,5 @@ export class CmdbListComponent implements OnInit {
     }
   }
 
-  // Derive distinct OS and environment values from the current page for filter dropdowns.
-  private updateFilterOptions(records: CmdbRecord[]): void {
-    const osSet  = new Set<string>(this.osList);
-    const envSet = new Set<string>(this.environments);
-    for (const r of records) {
-      if (r.os)          osSet.add(r.os);
-      if (r.environment) envSet.add(r.environment);
-    }
-    this.osList       = Array.from(osSet).sort();
-    this.environments = Array.from(envSet).sort();
-  }
 }
+

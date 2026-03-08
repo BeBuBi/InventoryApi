@@ -19,18 +19,6 @@ public class Cmdb {
     @Column(name = "sys_id")
     private String sysId;
 
-    @Column(name = "asset_tag")
-    private String assetTag;
-
-    @Column(name = "serial_number")
-    private String serialNumber;
-
-    @Column(name = "manufacturer")
-    private String manufacturer;
-
-    @Column(name = "model_name")
-    private String modelName;
-
     @Column(name = "os")
     private String os;
 

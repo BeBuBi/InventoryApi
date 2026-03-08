@@ -1,9 +1,9 @@
 # Architecture Overview
 ## Server Inventory System
 
-**Version:** 1.0
+**Version:** 1.1
 **Author:** Solo Developer
-**Last Updated:** 2026-02-27
+**Last Updated:** 2026-03-07
 **Status:** Draft
 
 ---
@@ -27,9 +27,9 @@
 
 ## 1. Overview
 
-The Server Inventory System is built as a **monolith architecture** deployed on **Kubernetes** using **Docker containers**. It consists of a single Spring Boot backend service, a React frontend, and a **single SQLite database** containing all tables.
+The Server Inventory System is built as a **monolith architecture** deployed on **Kubernetes** using **Docker containers**. It consists of a single Spring Boot backend service, an Angular frontend, and a **single SQLite database** containing all tables.
 
-The backend service handles all responsibilities in one place — inventory management, vSphere sync, New Relic sync, credentials management, and schedule management. The React frontend communicates directly with the backend service. External data is pulled from **VMware vSphere** and **New Relic** via scheduled sync jobs running inside the backend service.
+The backend service handles all responsibilities in one place — inventory management, vSphere sync, New Relic sync, ServiceNow CMDB sync, credentials management, and schedule management. The Angular frontend communicates directly with the backend service. External data is pulled from **VMware vSphere**, **New Relic**, and **ServiceNow CMDB** via scheduled sync jobs running inside the backend service.
 
 ---
 
@@ -64,11 +64,13 @@ The backend service handles all responsibilities in one place — inventory mana
                         │  InventoryController                 │
                         │  VsphereController                   │
                         │  NewRelicController                  │
+                        │  CmdbController                      │
                         │  CredentialsController               │
                         │  ScheduleController                  │
                         │  ─────────────────────────────────  │
                         │  VsphereSyncJob (scheduled)          │
                         │  NewRelicSyncJob (scheduled)         │
+                        │  CmdbSyncJob (scheduled)             │
                         └────────────────┬────────────────────┘
                                          │
                                          ▼
@@ -79,15 +81,16 @@ The backend service handles all responsibilities in one place — inventory mana
                         │  inventory              │
                         │  vsphere                │
                         │  newrelic               │
+                        │  cmdb                   │
                         │  credentials            │
                         │  sync_schedule          │
                         └────────────────────────┘
 
   External Systems:
-  ┌──────────────────┐     ┌──────────────────┐
-  │   VMware vSphere │     │    New Relic API  │
-  │   (vCenter API)  │     │   (NerdGraph API) │
-  └──────────────────┘     └──────────────────┘
+  ┌──────────────────┐   ┌──────────────────┐   ┌──────────────────────┐
+  │   VMware vSphere │   │    New Relic API  │   │  ServiceNow CMDB     │
+  │   (vCenter API)  │   │   (NerdGraph API) │   │  (OAuth2 REST API)   │
+  └──────────────────┘   └──────────────────┘   └──────────────────────┘
 ```
 
 ---
@@ -102,14 +105,15 @@ The backend service handles all responsibilities in one place — inventory mana
 
 **Responsibilities:**
 - Manage the `inventory` table (CRUD operations)
-- Expose unified search and filter endpoints across all three tables
+- Expose unified search and filter endpoints across all data source tables
 - Perform SQL JOINs across `inventory`, `vsphere`, and `newrelic` tables
 - Sync VM data from vSphere on a configurable schedule
 - Sync entity data from New Relic on a configurable schedule
-- Manage credentials for vSphere and New Relic (create, update, enable, disable, delete)
-- Manage sync schedules for vSphere and New Relic (save, update, enable, disable)
+- Sync asset data from ServiceNow CMDB on a configurable schedule (OAuth2 password grant)
+- Manage credentials for vSphere, New Relic, and CMDB (create, update, enable, disable, delete)
+- Manage sync schedules for vSphere, New Relic, and CMDB (save, update, enable, disable)
 - Enforce authentication (JWT)
-- Handle CORS for the React frontend
+- Handle CORS for the Angular frontend
 
 **Key Endpoints:**
 ```
@@ -128,6 +132,12 @@ GET    /api/newrelic                     List all New Relic records (paginated)
 GET    /api/newrelic/{hostname}          Get New Relic record by hostname
 POST   /api/newrelic/sync                Trigger manual New Relic sync
 GET    /api/newrelic/sync/status         Get last New Relic sync status and timestamp
+
+GET    /api/cmdb                         List all CMDB records (paginated, filterable by operationalStatus)
+GET    /api/cmdb/{hostname}              Get CMDB record by hostname
+GET    /api/cmdb/operational-statuses    List distinct operational status values
+POST   /api/cmdb/sync                    Trigger manual CMDB sync
+GET    /api/cmdb/sync/status             Get last CMDB sync status and timestamp
 
 GET    /api/credentials                  List all credentials (passwords masked)
 GET    /api/credentials/{id}             Get credential by ID (password masked)
@@ -192,6 +202,32 @@ Schedule: Fixed polling interval (every 1 minute) to check sync_schedule table
 4. Skip if no schedule is enabled or current time does not match
 ```
 
+**CMDB (ServiceNow) Sync Job:**
+```
+Schedule: Fixed polling interval (every 1 minute) to check sync_schedule table
+1. Load sync schedule WHERE service = 'cmdb' AND enabled = 1
+2. Check if current time matches the configured cron expression
+3. If match:
+   a. Query all credentials WHERE service = 'cmdb' AND enabled = 1
+   b. For each enabled credential:
+      i.   Decrypt config JSON using AES-256 + ENCRYPTION_KEY
+      ii.  Extract token_url, api_url, client_id, client_secret, username, password
+      iii. POST to token_url with OAuth2 password grant → obtain Bearer token
+      iv.  GET api_url with Authorization: Bearer header → receive CMDB asset list
+      v.   Map ServiceNow fields to internal model:
+             u_ci_name            → hostname
+             u_server_os          → os
+             u_server_os_version  → osVersion
+             u_ci_ip_address      → ipAddress
+             u_env_name           → environment
+             u_ci_sys_class_name  → classification
+             u_ci_install_status  → operationalStatus
+      vi.  Upsert records into cmdb table
+      vii. Update last_synced_at timestamp
+      viii.Log sync result (success/failure, record count)
+4. Skip if no schedule is enabled or current time does not match
+```
+
 **Package Structure:**
 ```
 com.example.inventorysystem
@@ -199,26 +235,34 @@ com.example.inventorysystem
 │   ├── InventoryController.java
 │   ├── VsphereController.java
 │   ├── NewRelicController.java
+│   ├── CmdbController.java
 │   ├── CredentialsController.java
 │   └── ScheduleController.java
 ├── service
 │   ├── InventoryService.java
 │   ├── VsphereService.java
 │   ├── NewRelicService.java
+│   ├── CmdbService.java
 │   ├── CredentialsService.java
 │   ├── ScheduleService.java
+│   ├── SyncStatusService.java
+│   └── EncryptionService.java
+├── sync
 │   ├── VsphereSyncJob.java
-│   └── NewRelicSyncJob.java
+│   ├── NewRelicSyncJob.java
+│   └── CmdbSyncJob.java
 ├── repository
 │   ├── InventoryRepository.java
 │   ├── VsphereRepository.java
 │   ├── NewRelicRepository.java
-│   ├── CredentialsRepository.java
-│   └── ScheduleRepository.java
+│   ├── CmdbRepository.java
+│   ├── CredentialRepository.java
+│   └── SyncScheduleRepository.java
 ├── model
 │   ├── Inventory.java
 │   ├── Vsphere.java
 │   ├── NewRelic.java
+│   ├── Cmdb.java
 │   ├── Credential.java
 │   └── SyncSchedule.java
 ├── dto
@@ -226,12 +270,14 @@ com.example.inventorysystem
 │   ├── InventoryResponse.java
 │   ├── VsphereResponse.java
 │   ├── NewRelicResponse.java
+│   ├── CmdbResponse.java
 │   ├── CredentialRequest.java
 │   ├── CredentialResponse.java
 │   └── SyncStatusResponse.java
 ├── client
 │   ├── VsphereApiClient.java
-│   └── NewRelicApiClient.java
+│   ├── NewRelicApiClient.java
+│   └── CmdbApiClient.java
 └── exception
     └── GlobalExceptionHandler.java
 ```
@@ -257,7 +303,8 @@ com.example.inventorysystem
 /inventory/:hostname       Asset detail page
 /vsphere                   vSphere data view
 /newrelic                  New Relic data view
-/settings/credentials      Credentials management page (vSphere + New Relic)
+/cmdb                      CMDB (ServiceNow) data view
+/settings/credentials      Credentials management page (vSphere, New Relic, CMDB)
 /settings/schedule         Sync schedule management (day + time picker per service)
 ```
 
@@ -275,11 +322,11 @@ export const environment = {
 
 ### 5.1 User Views Inventory (Read Flow)
 ```
-1. User opens React app in browser
-2. React fetches GET /api/inventory from Backend Service
+1. User opens Angular app in browser
+2. Angular fetches GET /api/inventory from Backend Service
 3. Backend Service executes JOIN query across inventory, vsphere, newrelic tables
-4. Response flows back to React
-5. React renders the enriched inventory table
+4. Response flows back to Angular
+5. Angular renders the enriched inventory table
 ```
 
 ### 5.2 vSphere Sync (Scheduled Flow)
@@ -293,19 +340,33 @@ export const environment = {
 7. Sync result is logged
 ```
 
-### 5.3 Manual Sync Trigger (On-Demand Flow)
+### 5.3 CMDB Sync (Scheduled Flow)
 ```
-1. Admin clicks "Sync Now" in React UI
-2. React calls POST /api/vsphere/sync to Backend Service
-3. Sync job runs immediately
-4. Response returns sync status to UI
+1. Backend Service polls sync_schedule table every 1 minute
+2. If current time matches the configured cron for 'cmdb' and enabled = 1
+3. CmdbApiClient obtains OAuth2 Bearer token from ServiceNow token_url
+4. CmdbApiClient calls api_url with Bearer token to retrieve asset list
+5. Each record is mapped from ServiceNow field names to internal model
+6. Records are upserted into cmdb table in inventory.db
+7. last_synced_at is updated
+8. Sync result is logged
 ```
 
-### 5.4 User Updates Sync Schedule (Config Flow)
+### 5.4 Manual Sync Trigger (On-Demand Flow)
 ```
-1. Admin opens /settings/sync-schedule in React UI
-2. Admin selects service (vsphere or newrelic), day(s), and time
-3. React calls PUT /api/schedule/{service} to Backend Service
+1. Admin clicks "Sync Now" in Angular UI
+2. Angular calls POST /api/{service}/sync to Backend Service
+3. Backend marks status as 'running' and spawns a background thread
+4. HTTP 202 Accepted returned immediately
+5. Frontend polls GET /api/{service}/sync/status every 3 seconds
+6. Badge updates automatically when status changes to 'success' or 'failed'
+```
+
+### 5.5 User Updates Sync Schedule (Config Flow)
+```
+1. Admin opens /settings/schedule in Angular UI
+2. Admin selects service (vsphere, newrelic, or cmdb), day(s), and time
+3. Angular calls PUT /api/schedule/{service} to Backend Service
 4. Backend Service converts selection to cron expression
 5. Cron expression saved to sync_schedule table in inventory.db
 6. Sync job picks up new schedule on its next 1-minute poll
@@ -322,17 +383,18 @@ All data is stored in a **single SQLite database file** (`inventory.db`) owned b
 | `inventory` | Read / Write + JOIN across all tables |
 | `vsphere` | Read / Write (upsert during sync, query via API) |
 | `newrelic` | Read / Write (upsert during sync, query via API) |
+| `cmdb` | Read / Write (upsert during sync, query via API) |
 | `credentials` | Read / Write (save via API, load at sync time) |
 | `sync_schedule` | Read / Write (save via API, checked on each poll) |
 
 **Credentials Table**
 
-vSphere and New Relic connection credentials are stored in a `credentials` table in the database. Multiple accounts per service are supported — for example, multiple vCenter instances or multiple New Relic accounts. Each credential entry has an `enabled` flag that controls whether the sync job will use it. Passwords and API keys are encrypted at rest using AES-256. The Backend Service reloads enabled credentials before each sync job run, so changes take effect without restarting.
+vSphere, New Relic, and CMDB connection credentials are stored in a `credentials` table in the database. Multiple accounts per service are supported — for example, multiple vCenter instances, multiple New Relic accounts, or multiple ServiceNow instances. Each credential entry has an `enabled` flag that controls whether the sync job will use it. Passwords and API keys are encrypted at rest using AES-256. The Backend Service reloads enabled credentials before each sync job run, so changes take effect without restarting.
 
 ```sql
 CREATE TABLE credentials (
     id          INTEGER     PRIMARY KEY AUTOINCREMENT,
-    service     TEXT        NOT NULL,             -- 'vsphere' or 'newrelic'
+    service     TEXT        NOT NULL,             -- 'vsphere', 'newrelic', or 'cmdb'
     name        TEXT        NOT NULL,             -- user-defined label e.g. 'Name|AccountId'
     config      TEXT        NOT NULL,             -- AES-256 encrypted JSON
     enabled     INTEGER     NOT NULL DEFAULT 1,   -- 1 = enabled, 0 = disabled
@@ -364,6 +426,18 @@ For New Relic:
 }
 ```
 
+For CMDB (ServiceNow):
+```json
+{
+  "token_url": "https://your-instance.service-now.com/oauth_token.do",
+  "api_url": "https://your-instance.service-now.com/api/xci/cmdb_asset/getAssetDetails",
+  "client_id": "your-client-id",
+  "client_secret": "your-client-secret",
+  "username": "sync-user",
+  "password": "secret"
+}
+```
+
 **Example rows:**
 
 | id | service   | name                    | enabled | config (encrypted) |
@@ -382,7 +456,7 @@ The sync schedule for each service is stored in the `sync_schedule` table. Users
 ```sql
 CREATE TABLE sync_schedule (
     id          INTEGER     PRIMARY KEY AUTOINCREMENT,
-    service     TEXT        NOT NULL UNIQUE,   -- 'vsphere' or 'newrelic'
+    service     TEXT        NOT NULL UNIQUE,   -- 'vsphere', 'newrelic', or 'cmdb'
     cron_expr   TEXT        NOT NULL,          -- standard cron e.g. '0 0 2 * * MON-FRI'
     enabled     INTEGER     NOT NULL DEFAULT 1, -- 1 = active, 0 = paused
     description TEXT,                          -- human-readable e.g. 'Weekdays at 2:00 AM'
@@ -403,10 +477,11 @@ CREATE TABLE sync_schedule (
 
 **Example rows:**
 
-| id | service  | cron_expr        | enabled | description            |
-|----|----------|------------------|---------|------------------------|
-| 1  | vsphere  | `0 0 2 * * *`    | 1       | Every day at 2:00 AM   |
-| 2  | newrelic | `0 0 6 * * MON-FRI` | 1    | Weekdays at 6:00 AM    |
+| id | service  | cron_expr           | enabled | description            |
+|----|----------|---------------------|---------|------------------------|
+| 1  | vsphere  | `0 0 2 * * *`       | 1       | Every day at 2:00 AM   |
+| 2  | newrelic | `0 0 6 * * MON-FRI` | 1       | Weekdays at 6:00 AM    |
+| 3  | cmdb     | `0 0 3 * * *`       | 0       | Every day at 3:00 AM   |
 
 The AES encryption key itself is the **only secret** that remains in a Kubernetes Secret (one key, not per-service credentials):
 ```yaml
@@ -567,7 +642,7 @@ COPY --from=build /app/dist/inventory-app/browser /usr/share/nginx/html
 | Concern | Approach |
 |---------|----------|
 | Authentication | JWT token — issued on login, validated in Backend Service |
-| vSphere & New Relic credentials | Stored encrypted (AES-256) in database, editable via UI |
+| vSphere, New Relic & CMDB credentials | Stored encrypted (AES-256) in database, editable via UI |
 | Encryption key | AES key stored as Kubernetes Secret, injected as env variable |
 | Credential masking | GET /api/credentials returns masked password/key (never plaintext) |
 | HTTPS | TLS terminated at Backend Service (LoadBalancer) |

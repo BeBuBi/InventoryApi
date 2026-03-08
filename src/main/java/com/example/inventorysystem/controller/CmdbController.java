@@ -7,6 +7,7 @@ import com.example.inventorysystem.exception.SyncAlreadyRunningException;
 import com.example.inventorysystem.service.CmdbService;
 import com.example.inventorysystem.service.SyncStatusService;
 import com.example.inventorysystem.sync.CmdbSyncJob;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,11 +25,15 @@ public class CmdbController {
     @GetMapping
     public PagedResponse<CmdbResponse> list(
             @RequestParam(required = false) String search,
-            @RequestParam(required = false) String os,
-            @RequestParam(required = false) String environment,
+            @RequestParam(required = false) String operationalStatus,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return cmdbService.list(search, os, environment, page, size);
+        return cmdbService.list(search, operationalStatus, page, size);
+    }
+
+    @GetMapping("/operational-statuses")
+    public List<String> listOperationalStatuses() {
+        return cmdbService.listOperationalStatuses();
     }
 
     @GetMapping("/{hostname}")

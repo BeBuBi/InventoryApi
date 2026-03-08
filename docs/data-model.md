@@ -1,8 +1,8 @@
 # Data Model
 ## Server Inventory System
 
-**Version:** 1.0
-**Last Updated:** 2026-03-06
+**Version:** 1.1
+**Last Updated:** 2026-03-07
 **Database:** SQLite 3.x
 
 ---
@@ -15,8 +15,9 @@
    - [inventory](#31-inventory)
    - [vsphere](#32-vsphere)
    - [newrelic](#33-newrelic)
-   - [credentials](#34-credentials)
-   - [sync_schedule](#35-sync_schedule)
+   - [cmdb](#34-cmdb)
+   - [credentials](#35-credentials)
+   - [sync_schedule](#36-sync_schedule)
 4. [Design Decisions](#4-design-decisions)
 5. [SQLite Type Conventions](#5-sqlite-type-conventions)
 
@@ -24,13 +25,14 @@
 
 ## 1. Overview
 
-The data model consists of five tables stored in a single SQLite database file (`inventory.db`). All tables are independent — there are no foreign key constraints between them. The `hostname` field serves as the natural common key across `inventory`, `vsphere`, and `newrelic`, allowing the application layer to correlate data via JOIN queries.
+The data model consists of six tables stored in a single SQLite database file (`inventory.db`). All tables are independent — there are no foreign key constraints between them. The `hostname` field serves as the natural common key across `inventory`, `vsphere`, `newrelic`, and `cmdb`, allowing the application layer to correlate data via JOIN queries.
 
 | Table | Purpose |
 |-------|---------|
 | `inventory` | Core asset registry — all managed servers, VMs, and containers |
 | `vsphere` | VMware vSphere VM metadata, synced from vCenter API |
 | `newrelic` | New Relic monitoring data, synced from NerdGraph API |
+| `cmdb` | CMDB configuration item data, synced from ServiceNow |
 | `credentials` | Encrypted connection credentials for vSphere and New Relic accounts |
 | `sync_schedule` | User-configured sync schedule (day + time) per service |
 
@@ -78,17 +80,25 @@ The data model consists of five tables stored in a single SQLite database file (
 │ account_id              │
 │ created_at              │
 │ updated_at              │
-└─────────────────────────┘     ┌─────────────────────────┐
-                                 │       sync_schedule      │
-                                 │─────────────────────────│
-                                 │ id (PK)                  │
-                                 │ service                  │
-                                 │ cron_expr                │
-                                 │ enabled                  │
-                                 │ description              │
-                                 │ last_run_at              │
-                                 │ updated_at               │
-                                 └─────────────────────────┘
+└─────────────────────────┘
+
+┌─────────────────────────┐     ┌─────────────────────────┐
+│          cmdb           │     │       sync_schedule      │
+│─────────────────────────│     │─────────────────────────│
+│ hostname (PK)           │     │ id (PK)                  │
+│ sys_id                  │     │ service                  │
+│ os                      │     │ cron_expr                │
+│ os_version              │     │ enabled                  │
+│ ip_address              │     │ description              │
+│ location                │     │ last_run_at              │
+│ department              │     │ updated_at               │
+│ environment             │     └─────────────────────────┘
+│ operational_status      │
+│ classification          │
+│ last_synced_at          │
+│ created_at              │
+│ updated_at              │
+└─────────────────────────┘
 ```
 
 ---
@@ -177,7 +187,29 @@ New Relic infrastructure monitoring data. Populated by the New Relic sync job vi
 
 ---
 
-### 3.4 `credentials`
+### 3.4 `cmdb`
+
+CMDB (Configuration Management Database) configuration item data. Populated by the CMDB sync job. Each record corresponds to one CI in the CMDB, identified by `hostname`.
+
+| Column              | Type | Constraints | Description                                          |
+|---------------------|------|-------------|------------------------------------------------------|
+| hostname            | TEXT | PK          | Asset hostname — primary identifier and join key     |
+| sys_id              | TEXT |             | ServiceNow sys_id for the CI record                  |
+| os                  | TEXT |             | Operating system name                                |
+| os_version          | TEXT |             | Operating system version                             |
+| ip_address          | TEXT |             | Primary IP address of the CI                         |
+| location            | TEXT |             | Physical or logical location                         |
+| department          | TEXT |             | Owning department                                    |
+| environment         | TEXT |             | Environment (e.g. production, staging)               |
+| operational_status  | TEXT |             | Operational status of the CI                         |
+| classification      | TEXT |             | CI classification                                    |
+| last_synced_at      | TEXT |             | Last sync timestamp from CMDB (ISO 8601 UTC)         |
+| created_at          | TEXT | NOT NULL    | Record creation time (ISO 8601 UTC)                  |
+| updated_at          | TEXT | NOT NULL    | Last update time (ISO 8601 UTC)                      |
+
+---
+
+### 3.5 `credentials`
 
 Stores encrypted connection credentials for vSphere and New Relic accounts. Supports multiple accounts per service. Managed by the user via the Settings UI.
 
@@ -230,7 +262,7 @@ For `newrelic`:
 
 ---
 
-### 3.5 `sync_schedule`
+### 3.6 `sync_schedule`
 
 Stores the user-configured sync schedule per service. The Backend Service polls this table every minute and triggers the appropriate sync job when the current time matches the cron expression.
 

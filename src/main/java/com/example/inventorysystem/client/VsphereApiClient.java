@@ -13,6 +13,10 @@ import javax.net.ssl.*;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.stream.StreamSupport;
 
 @Slf4j
 @Component
@@ -27,7 +31,8 @@ public class VsphereApiClient {
             Integer cpuCount, Integer cpuCores,
             Integer memoryMb, Integer memoryGb,
             String powerState, String guestOs, String toolsStatus,
-            String ipv4Address, String ipv6Address
+            String ipv4Address, String ipv6Address,
+            String sourceUrl
     ) {}
 
     public List<VmData> fetchAllVms(String credentialId) throws Exception {
@@ -65,17 +70,32 @@ public class VsphereApiClient {
                 .retrieve()
                 .body(String.class);
 
-        List<VmData> result = new ArrayList<>();
+        String sourceUrl = host;
         JsonNode vms = objectMapper.readTree(vmsJson);
-        for (JsonNode vm : vms) {
-            result.add(mapVm(vm, client, sessionToken));
-        }
 
-        log.info("vSphere sync: fetched {} VMs from {}", result.size(), host);
-        return result;
+        // Process all VMs concurrently — each VM requires 4 sequential API calls, but all
+        // VMs are independent so parallelising across VMs cuts wall-clock time from N*4 calls
+        // to roughly 4 calls (bounded by the thread pool size vs. number of VMs).
+        ExecutorService executor = Executors.newFixedThreadPool(10);
+        try {
+            List<CompletableFuture<VmData>> futures = StreamSupport
+                    .stream(vms.spliterator(), false)
+                    .map(vm -> CompletableFuture.supplyAsync(
+                            () -> mapVm(vm, client, sessionToken, sourceUrl), executor))
+                    .toList();
+
+            List<VmData> result = futures.stream()
+                    .map(CompletableFuture::join)
+                    .toList();
+
+            log.info("vSphere sync: fetched {} VMs from {}", result.size(), host);
+            return result;
+        } finally {
+            executor.shutdown();
+        }
     }
 
-    private VmData mapVm(JsonNode vm, RestClient client, String sessionToken) {
+    private VmData mapVm(JsonNode vm, RestClient client, String sessionToken, String sourceUrl) {
         String vmId = vm.path("vm").asText();
         String vmName = vm.path("name").asText();
         String powerState = normalizePowerState(vm.path("power_state").asText(null));
@@ -114,11 +134,11 @@ public class VsphereApiClient {
 
             return new VmData(hostname, vmName,
                     cpuCount, cpuCores, memoryMb, memoryGb,
-                    powerState, guestOs, toolsStatus, ipv4, ipv6);
+                    powerState, guestOs, toolsStatus, ipv4, ipv6, sourceUrl);
         } catch (Exception e) {
             log.warn("Failed to fetch details for VM {}: {}", vmId, e.getMessage());
             return new VmData(vmName.toLowerCase(), vmName,
-                    null, null, null, null, powerState, null, null, null, null);
+                    null, null, null, null, powerState, null, null, null, null, sourceUrl);
         }
     }
 

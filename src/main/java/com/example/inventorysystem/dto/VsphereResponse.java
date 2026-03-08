@@ -19,6 +19,7 @@ public class VsphereResponse {
     private final String toolsStatus;
     private final String ipv4Address;
     private final String ipv6Address;
+    private final String sourceUrl;
     private final String lastSyncedAt;
     private final String createdAt;
     private final String updatedAt;
@@ -35,6 +36,7 @@ public class VsphereResponse {
         this.toolsStatus = v.getToolsStatus();
         this.ipv4Address = v.getIpv4Address();
         this.ipv6Address = v.getIpv6Address();
+        this.sourceUrl = v.getSourceUrl();
         this.lastSyncedAt = v.getLastSyncedAt();
         this.createdAt = v.getCreatedAt();
         this.updatedAt = v.getUpdatedAt();

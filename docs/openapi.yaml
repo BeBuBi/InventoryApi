@@ -22,13 +22,15 @@ security:
 
 tags:
   - name: Inventory
-    description: Core asset registry — create, read, update, delete assets
+    description: Read-only aggregated inventory VIEW — search, filter, and retrieve assets
   - name: vSphere
     description: VMware vSphere VM records and sync control
   - name: New Relic
     description: New Relic agent records and sync control
+  - name: Dashboard
+    description: Aggregated dashboard data from the inventory VIEW
   - name: Credentials
-    description: Encrypted connection credentials for vSphere and New Relic
+    description: Encrypted connection credentials for vSphere, New Relic, and CMDB
   - name: CMDB
     description: CMDB configuration item records synced from ServiceNow
   - name: Schedule
@@ -47,80 +49,56 @@ paths:
       tags: [Inventory]
       summary: List assets
       description: |
-        Returns a paginated list of all inventory assets with their associated
-        vSphere and New Relic data. Supports filtering by multiple criteria.
+        Returns a paginated list of assets from the read-only inventory VIEW.
+        The VIEW aggregates vsphere, newrelic, and cmdb by hostname.
       operationId: listInventory
       parameters:
         - $ref: '#/components/parameters/PageParam'
         - $ref: '#/components/parameters/SizeParam'
-        - name: hostname
+        - name: search
           in: query
           description: Partial hostname match (case-insensitive)
           schema:
             type: string
           example: web-prod
-        - name: environment
+        - name: operationalStatus
           in: query
-          description: Filter by environment
+          description: Filter by CMDB operational status code
           schema:
             type: string
-            enum: [production, staging, dev, dr]
-        - name: status
+          example: "1"
+        - name: sources
           in: query
-          description: Filter by status
+          description: Filter by source system(s)
           schema:
             type: string
-            enum: [active, maintenance, decommissioned, unknown]
-        - name: asset_type
-          in: query
-          description: Filter by asset type
-          schema:
-            type: string
-            enum: [server, vm, container, network]
+            enum: [vsphere, newrelic, cmdb]
+          example: vsphere
       responses:
         '200':
           description: Paginated list of assets
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AssetDetailPage'
+                $ref: '#/components/schemas/InventoryResponsePage'
         '400':
           $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-    post:
+  /api/inventory/counts:
+    get:
       tags: [Inventory]
-      summary: Create an asset
-      operationId: createInventory
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateInventoryRequest'
-            example:
-              hostname: web-prod-01
-              ip_address: 10.0.1.50
-              asset_type: vm
-              environment: production
-              owner: platform-team
-              location: dc1-rack-12
+      summary: Get inventory counts by source
+      description: Returns total asset count and per-source counts (vsphere, newrelic, cmdb).
+      operationId: getInventoryCounts
       responses:
-        '201':
-          description: Asset created
+        '200':
+          description: Asset counts by source
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InventoryRecord'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '409':
-          $ref: '#/components/responses/Conflict'
+                $ref: '#/components/schemas/InventoryCountsResponse'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -132,9 +110,9 @@ paths:
       tags: [Inventory]
       summary: Get asset detail
       description: |
-        Returns full detail for one asset — the inventory record plus its
-        associated vSphere and New Relic data. The `vsphere` and `newrelic`
-        fields are `null` if no sync record exists for this hostname.
+        Returns a flat asset detail record from the inventory VIEW for one hostname.
+        All vsphere, newrelic, and cmdb fields are included; fields from sources
+        that have no record for this hostname will be null.
       operationId: getInventoryByHostname
       responses:
         '200':
@@ -142,51 +120,38 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AssetDetail'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
+                $ref: '#/components/schemas/InventoryResponse'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-    put:
-      tags: [Inventory]
-      summary: Update an asset
-      operationId: updateInventory
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateInventoryRequest'
+  # ------------------------------------------------------------
+  # Dashboard
+  # ------------------------------------------------------------
+  /api/dashboard/assets:
+    get:
+      tags: [Dashboard]
+      summary: List assets for dashboard
+      description: |
+        Paginated search over the inventory VIEW for the dashboard view.
+        Simpler parameter set than /api/inventory — just search and pagination.
+      operationId: listDashboardAssets
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - name: search
+          in: query
+          description: Partial hostname match
+          schema:
+            type: string
       responses:
         '200':
-          description: Asset updated
+          description: Paginated inventory response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InventoryRecord'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
-    delete:
-      tags: [Inventory]
-      summary: Delete an asset
-      operationId: deleteInventory
-      responses:
-        '204':
-          description: Asset deleted
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
+                $ref: '#/components/schemas/InventoryResponsePage'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -476,6 +441,18 @@ paths:
                   config:
                     apiKey: NRAK-xxxxxxxxxxxx
                     accountId: "12345"
+              cmdb:
+                summary: ServiceNow CMDB credential
+                value:
+                  service: cmdb
+                  name: Production ServiceNow
+                  config:
+                    token_url: https://your-instance.service-now.com/oauth_token.do
+                    api_url: https://your-instance.service-now.com/api/xci/cmdb_asset/getAssetDetails
+                    client_id: your-client-id
+                    client_secret: your-client-secret
+                    username: sync-user
+                    password: secret
       responses:
         '201':
           description: Credential created
@@ -778,7 +755,7 @@ components:
       description: Service name
       schema:
         type: string
-        enum: [vsphere, newrelic]
+        enum: [vsphere, newrelic, cmdb]
       example: vsphere
 
   # ------------------------------------------------------------
@@ -786,117 +763,177 @@ components:
   # ------------------------------------------------------------
   schemas:
 
-    # -- Inventory --
-    InventoryRecord:
+    # -- Inventory (flat VIEW response) --
+    InventoryResponse:
       type: object
+      description: |
+        Flat aggregated record from the inventory VIEW. Fields from sources that
+        have no record for this hostname will be null.
       properties:
         hostname:
           type: string
           example: web-prod-01
-        ip_address:
+        # vSphere fields
+        vsphereIpv4:
           type: string
+          nullable: true
           example: 10.0.1.50
-        asset_type:
-          type: string
-          enum: [server, vm, container, network]
-          example: vm
-        environment:
-          type: string
-          enum: [production, staging, dev, dr]
-          example: production
-        owner:
+        vsphereIpv6:
           type: string
           nullable: true
-          example: platform-team
-        location:
+          example: null
+        vmName:
           type: string
           nullable: true
-          example: dc1-rack-12
-        status:
-          type: string
-          enum: [active, maintenance, decommissioned, unknown]
-          example: active
-        warranty_expiry:
-          type: string
-          format: date
-          nullable: true
-          example: "2027-06-30"
-        last_patched_at:
-          type: string
-          format: date-time
-          nullable: true
-          example: "2026-01-15T02:00:00Z"
-        created_at:
-          type: string
-          format: date-time
-          example: "2026-02-01T10:00:00Z"
-        updated_at:
-          type: string
-          format: date-time
-          example: "2026-03-01T08:30:00Z"
-
-    CreateInventoryRequest:
-      type: object
-      required: [hostname, ip_address, asset_type, environment]
-      properties:
-        hostname:
-          type: string
           example: web-prod-01
-        ip_address:
+        cpuCount:
+          type: integer
+          nullable: true
+          example: 4
+        cpuCores:
+          type: integer
+          nullable: true
+          example: 2
+        memoryMb:
+          type: integer
+          nullable: true
+          example: 8192
+        memoryGb:
+          type: integer
+          nullable: true
+          example: 8
+        powerState:
           type: string
-          example: 10.0.1.50
-        asset_type:
+          enum: [poweredOn, poweredOff, suspended]
+          nullable: true
+          example: poweredOn
+        guestOs:
           type: string
-          enum: [server, vm, container, network]
-          example: vm
-        environment:
+          nullable: true
+          example: "Ubuntu Linux (64-bit)"
+        toolsStatus:
           type: string
-          enum: [production, staging, dev, dr]
-          example: production
-        owner:
-          type: string
-          example: platform-team
-        location:
-          type: string
-          example: dc1-rack-12
-        status:
-          type: string
-          enum: [active, maintenance, decommissioned, unknown]
-          default: active
-        warranty_expiry:
-          type: string
-          format: date
-          example: "2027-06-30"
-        last_patched_at:
+          enum: [toolsOk, toolsOld, toolsNotRunning, toolsNotInstalled]
+          nullable: true
+          example: toolsOk
+        vsphereLastSynced:
           type: string
           format: date-time
-          example: "2026-01-15T02:00:00Z"
+          nullable: true
+          example: "2026-03-01T02:05:00Z"
+        # New Relic fields
+        fullHostname:
+          type: string
+          nullable: true
+          example: web-prod-01.corp.example.com
+        nrIpv4:
+          type: string
+          nullable: true
+          example: 10.0.1.50
+        nrIpv6:
+          type: string
+          nullable: true
+          example: null
+        processorCount:
+          type: integer
+          nullable: true
+          example: 4
+        coreCount:
+          type: integer
+          nullable: true
+          example: 2
+        systemMemoryBytes:
+          type: integer
+          nullable: true
+          example: 8589934592
+        linuxDistribution:
+          type: string
+          nullable: true
+          example: "Ubuntu 22.04"
+        service:
+          type: string
+          nullable: true
+          example: billing-service
+        nrEnvironment:
+          type: string
+          nullable: true
+          example: production
+        team:
+          type: string
+          nullable: true
+          example: platform
+        nrLocation:
+          type: string
+          nullable: true
+          example: dc1
+        accountId:
+          type: string
+          nullable: true
+          example: "12345"
+        # CMDB fields
+        sysId:
+          type: string
+          nullable: true
+          example: abc123def456
+        os:
+          type: string
+          nullable: true
+          example: "Red Hat Enterprise Linux"
+        osVersion:
+          type: string
+          nullable: true
+          example: "8.7"
+        cmdbIpAddress:
+          type: string
+          nullable: true
+          example: 10.0.1.50
+        cmdbLocation:
+          type: string
+          nullable: true
+          example: dc1-rack-12
+        department:
+          type: string
+          nullable: true
+          example: platform-engineering
+        cmdbEnvironment:
+          type: string
+          nullable: true
+          example: production
+        operationalStatus:
+          type: string
+          nullable: true
+          example: "1"
+        classification:
+          type: string
+          nullable: true
+          example: server
+        cmdbLastSynced:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-03-07T03:00:00Z"
+        # Computed
+        sources:
+          type: string
+          nullable: true
+          description: Comma-separated list of sources that have a record for this hostname
+          example: "vsphere,newrelic,cmdb"
 
-    UpdateInventoryRequest:
+    InventoryCountsResponse:
       type: object
       properties:
-        ip_address:
-          type: string
-          example: 10.0.1.51
-        asset_type:
-          type: string
-          enum: [server, vm, container, network]
-        environment:
-          type: string
-          enum: [production, staging, dev, dr]
-        owner:
-          type: string
-        location:
-          type: string
-        status:
-          type: string
-          enum: [active, maintenance, decommissioned, unknown]
-        warranty_expiry:
-          type: string
-          format: date
-        last_patched_at:
-          type: string
-          format: date-time
+        total:
+          type: integer
+          example: 350
+        vsphere:
+          type: integer
+          example: 280
+        newrelic:
+          type: integer
+          example: 310
+        cmdb:
+          type: integer
+          example: 240
 
     # -- vSphere --
     VsphereRecord:
@@ -946,6 +983,11 @@ components:
           type: string
           nullable: true
           example: null
+        source_url:
+          type: string
+          nullable: true
+          description: vCenter hostname this record was synced from
+          example: vcenter.corp.example.com
         last_synced_at:
           type: string
           format: date-time
@@ -967,7 +1009,7 @@ components:
         hostname:
           type: string
           example: web-prod-01
-        fqdn:
+        full_hostname:
           type: string
           nullable: true
           example: web-prod-01.corp.example.com
@@ -979,23 +1021,23 @@ components:
           type: string
           nullable: true
           example: null
-        cpu_count:
+        processor_count:
           type: integer
           nullable: true
           example: 4
-        cpu_cores:
+        core_count:
           type: integer
           nullable: true
           example: 2
-        memory_gb:
+        system_memory_bytes:
           type: integer
           nullable: true
-          example: 8
-        guest_os:
+          example: 8589934592
+        linux_distribution:
           type: string
           nullable: true
           example: "Ubuntu 22.04"
-        application:
+        service:
           type: string
           nullable: true
           example: billing-service
@@ -1003,20 +1045,18 @@ components:
           type: string
           nullable: true
           example: production
-        tags:
-          type: object
-          nullable: true
-          additionalProperties:
-            type: string
-          description: Key-value tags from New Relic
-          example:
-            team: platform
-            tier: backend
-        last_reported_at:
+        team:
           type: string
-          format: date-time
           nullable: true
-          example: "2026-03-02T06:10:00Z"
+          example: platform
+        location:
+          type: string
+          nullable: true
+          example: dc1
+        account_id:
+          type: string
+          nullable: true
+          example: "12345"
         created_at:
           type: string
           format: date-time
@@ -1026,41 +1066,24 @@ components:
           format: date-time
           example: "2026-03-02T06:10:00Z"
 
-    # -- Asset Detail (combined) --
-    AssetDetail:
-      type: object
-      properties:
-        inventory:
-          $ref: '#/components/schemas/InventoryRecord'
-        vsphere:
-          allOf:
-            - $ref: '#/components/schemas/VsphereRecord'
-          nullable: true
-          description: null if no vSphere record has been synced for this hostname
-        newrelic:
-          allOf:
-            - $ref: '#/components/schemas/NewRelicRecord'
-          nullable: true
-          description: null if no New Relic record has been synced for this hostname
-
     # -- Paginated responses --
-    AssetDetailPage:
+    InventoryResponsePage:
       type: object
       properties:
         content:
           type: array
           items:
-            $ref: '#/components/schemas/AssetDetail'
+            $ref: '#/components/schemas/InventoryResponse'
         page:
           type: integer
           example: 0
         size:
           type: integer
           example: 20
-        total_elements:
+        totalElements:
           type: integer
           example: 142
-        total_pages:
+        totalPages:
           type: integer
           example: 8
 
@@ -1190,7 +1213,7 @@ components:
           example: 1
         service:
           type: string
-          enum: [vsphere, newrelic]
+          enum: [vsphere, newrelic, cmdb]
           example: vsphere
         name:
           type: string
@@ -1200,6 +1223,7 @@ components:
           oneOf:
             - $ref: '#/components/schemas/VsphereConfigMasked'
             - $ref: '#/components/schemas/NewRelicConfigMasked'
+            - $ref: '#/components/schemas/CmdbConfigMasked'
         enabled:
           type: boolean
           example: true
@@ -1237,13 +1261,37 @@ components:
           type: string
           example: "12345"
 
+    CmdbConfigMasked:
+      type: object
+      properties:
+        token_url:
+          type: string
+          example: "https://your-instance.service-now.com/oauth_token.do"
+        api_url:
+          type: string
+          example: "https://your-instance.service-now.com/api/xci/cmdb_asset/getAssetDetails"
+        client_id:
+          type: string
+          example: "your-client-id"
+        client_secret:
+          type: string
+          description: Always masked in responses
+          example: "********"
+        username:
+          type: string
+          example: "sync-user"
+        password:
+          type: string
+          description: Always masked in responses
+          example: "********"
+
     CreateCredentialRequest:
       type: object
       required: [service, name, config]
       properties:
         service:
           type: string
-          enum: [vsphere, newrelic]
+          enum: [vsphere, newrelic, cmdb]
           example: vsphere
         name:
           type: string
@@ -1253,6 +1301,7 @@ components:
           oneOf:
             - $ref: '#/components/schemas/VsphereConfig'
             - $ref: '#/components/schemas/NewRelicConfig'
+            - $ref: '#/components/schemas/CmdbConfig'
 
     UpdateCredentialRequest:
       type: object
@@ -1264,6 +1313,7 @@ components:
           oneOf:
             - $ref: '#/components/schemas/VsphereConfig'
             - $ref: '#/components/schemas/NewRelicConfig'
+            - $ref: '#/components/schemas/CmdbConfig'
 
     VsphereConfig:
       type: object
@@ -1290,6 +1340,29 @@ components:
           type: string
           example: "12345"
 
+    CmdbConfig:
+      type: object
+      required: [token_url, api_url, client_id, client_secret, username, password]
+      properties:
+        token_url:
+          type: string
+          example: "https://your-instance.service-now.com/oauth_token.do"
+        api_url:
+          type: string
+          example: "https://your-instance.service-now.com/api/xci/cmdb_asset/getAssetDetails"
+        client_id:
+          type: string
+          example: "your-client-id"
+        client_secret:
+          type: string
+          example: "your-client-secret"
+        username:
+          type: string
+          example: "sync-user"
+        password:
+          type: string
+          example: "secret"
+
     # -- Sync Schedule --
     SyncScheduleRecord:
       type: object
@@ -1299,7 +1372,7 @@ components:
           example: 1
         service:
           type: string
-          enum: [vsphere, newrelic]
+          enum: [vsphere, newrelic, cmdb]
           example: vsphere
         cron_expr:
           type: string
@@ -1343,7 +1416,7 @@ components:
       properties:
         service:
           type: string
-          enum: [vsphere, newrelic]
+          enum: [vsphere, newrelic, cmdb]
           example: vsphere
         status:
           type: string
@@ -1369,7 +1442,7 @@ components:
       properties:
         service:
           type: string
-          enum: [vsphere, newrelic]
+          enum: [vsphere, newrelic, cmdb]
           example: vsphere
         message:
           type: string

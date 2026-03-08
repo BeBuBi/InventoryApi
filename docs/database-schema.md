@@ -1,7 +1,7 @@
 # Database Schema
 ## Server Inventory System
 
-**Version:** 1.2
+**Version:** 1.3
 **Last Updated:** 2026-03-07
 **Database:** SQLite 3.x
 **Migration Tool:** Flyway
@@ -29,7 +29,7 @@
 
 All application data is stored in a single SQLite database file (`inventory.db`). The schema is managed by **Flyway** — all changes must be made through versioned migration files, never by editing the database directly.
 
-The database contains six tables. There are no foreign key constraints between tables by design — each table is populated independently by different sources (manual entry, vSphere sync, New Relic sync, CMDB sync). The `hostname` column is the natural join key across `inventory`, `vsphere`, `newrelic`, and `cmdb`.
+The database contains five physical tables (`vsphere`, `newrelic`, `cmdb`, `credentials`, `sync_schedule`) and one read-only SQL VIEW (`inventory`). There are no foreign key constraints between tables by design — each table is populated independently by different sync sources. The `hostname` column is the natural join key across `vsphere`, `newrelic`, and `cmdb`; the `inventory` VIEW aggregates all three by hostname.
 
 ---
 
@@ -37,7 +37,7 @@ The database contains six tables. There are no foreign key constraints between t
 
 | File | Description |
 |------|-------------|
-| `V1__init_schema.sql` | Initial schema — creates all five tables and seeds default sync schedules |
+| `V1__init_schema.sql` | Initial schema — creates three source tables (`vsphere`, `newrelic`, `cmdb`), one read-only aggregation VIEW (`inventory`), two management tables (`credentials`, `sync_schedule`), and seeds default sync schedules |
 
 **Location:** `src/main/resources/db/migration/`
 
@@ -69,40 +69,104 @@ spring.flyway.locations=classpath:db/migration
 
 ## 4. Tables
 
-### 4.1 `inventory`
+### 4.1 `inventory` (View — Read Only)
 
-Core asset registry. Every managed server, VM, or container must have a record here before it can be correlated with vSphere or New Relic data.
+A read-only SQL VIEW that aggregates `vsphere`, `newrelic`, and `cmdb` by hostname. It is never written to directly. A UNION of all three source tables drives the hostname list, which is then LEFT JOINed to each source table to produce the flat record.
 
 ```sql
-CREATE TABLE inventory (
-    hostname        TEXT    NOT NULL,
-    ip_address      TEXT    NOT NULL,
-    asset_type      TEXT    NOT NULL CHECK (asset_type IN ('server', 'vm', 'container', 'network')),
-    environment     TEXT    NOT NULL CHECK (environment IN ('production', 'staging', 'dev', 'dr')),
-    owner           TEXT,
-    location        TEXT,
-    status          TEXT    NOT NULL DEFAULT 'active'  CHECK (status      IN ('active', 'maintenance', 'decommissioned', 'unknown')),
-    warranty_expiry TEXT,
-    last_patched_at TEXT,
-    created_at      TEXT    NOT NULL,
-    updated_at      TEXT    NOT NULL,
-    PRIMARY KEY (hostname)
-);
+CREATE VIEW inventory AS
+SELECT
+    h.hostname,
+    -- vSphere columns
+    v.ipv4_address          AS vsphere_ipv4,
+    v.ipv6_address          AS vsphere_ipv6,
+    v.vm_name,
+    v.cpu_count,
+    v.cpu_cores,
+    v.memory_mb,
+    v.memory_gb,
+    v.power_state,
+    v.guest_os,
+    v.tools_status,
+    v.last_synced_at        AS vsphere_last_synced,
+    -- New Relic columns
+    n.full_hostname,
+    n.ipv4_address          AS nr_ipv4,
+    n.ipv6_address          AS nr_ipv6,
+    n.processor_count,
+    n.core_count,
+    n.system_memory_bytes,
+    n.linux_distribution,
+    n.service,
+    n.environment           AS nr_environment,
+    n.team,
+    n.location              AS nr_location,
+    n.account_id,
+    -- CMDB columns
+    c.sys_id,
+    c.os,
+    c.os_version,
+    c.ip_address            AS cmdb_ip_address,
+    c.location              AS cmdb_location,
+    c.department,
+    c.environment           AS cmdb_environment,
+    c.operational_status,
+    c.classification,
+    c.last_synced_at        AS cmdb_last_synced,
+    -- Computed: comma-separated list of sources that have a record for this hostname
+    (CASE WHEN v.hostname IS NOT NULL THEN 'vsphere' ELSE '' END ||
+     CASE WHEN n.hostname IS NOT NULL THEN
+       CASE WHEN v.hostname IS NOT NULL THEN ',newrelic' ELSE 'newrelic' END ELSE '' END ||
+     CASE WHEN c.hostname IS NOT NULL THEN
+       CASE WHEN v.hostname IS NOT NULL OR n.hostname IS NOT NULL THEN ',cmdb' ELSE 'cmdb' END ELSE '' END
+    ) AS sources
+FROM (
+    SELECT hostname FROM vsphere
+    UNION SELECT hostname FROM newrelic
+    UNION SELECT hostname FROM cmdb
+) h
+LEFT JOIN vsphere  v ON h.hostname = v.hostname
+LEFT JOIN newrelic n ON h.hostname = n.hostname
+LEFT JOIN cmdb     c ON h.hostname = c.hostname;
 ```
 
-| Column | Type | Nullable | Default | Description |
-|--------|------|----------|---------|-------------|
-| `hostname` | TEXT | NO | — | Unique asset hostname — primary key and join key |
-| `ip_address` | TEXT | NO | — | Primary IPv4 or IPv6 address |
-| `asset_type` | TEXT | NO | — | `server`, `vm`, `container`, `network` |
-| `environment` | TEXT | NO | — | `production`, `staging`, `dev`, `dr` |
-| `owner` | TEXT | YES | — | Team or person responsible |
-| `location` | TEXT | YES | — | Data center, rack, or cloud region |
-| `status` | TEXT | NO | `active` | `active`, `maintenance`, `decommissioned`, `unknown` |
-| `warranty_expiry` | TEXT | YES | — | Hardware warranty expiry date (ISO 8601) |
-| `last_patched_at` | TEXT | YES | — | Last OS patch date/time (ISO 8601 UTC) |
-| `created_at` | TEXT | NO | — | Record creation time (ISO 8601 UTC) |
-| `updated_at` | TEXT | NO | — | Last update time (ISO 8601 UTC) |
+| Column | Source | Description |
+|--------|--------|-------------|
+| `hostname` | — | Asset hostname — join key |
+| `vsphere_ipv4` | vsphere.ipv4_address | VM IPv4 address |
+| `vsphere_ipv6` | vsphere.ipv6_address | VM IPv6 address |
+| `vm_name` | vsphere.vm_name | VM display name in vSphere |
+| `cpu_count` | vsphere.cpu_count | Number of vCPUs |
+| `cpu_cores` | vsphere.cpu_cores | Number of CPU cores |
+| `memory_mb` | vsphere.memory_mb | Allocated memory in MB |
+| `memory_gb` | vsphere.memory_gb | Allocated memory in GB |
+| `power_state` | vsphere.power_state | VM power state |
+| `guest_os` | vsphere.guest_os | Guest OS name |
+| `tools_status` | vsphere.tools_status | VMware Tools status |
+| `vsphere_last_synced` | vsphere.last_synced_at | Last vSphere sync timestamp |
+| `full_hostname` | newrelic.full_hostname | FQDN from New Relic |
+| `nr_ipv4` | newrelic.ipv4_address | IPv4 from New Relic |
+| `nr_ipv6` | newrelic.ipv6_address | IPv6 from New Relic |
+| `processor_count` | newrelic.processor_count | CPU count from New Relic |
+| `core_count` | newrelic.core_count | Core count from New Relic |
+| `system_memory_bytes` | newrelic.system_memory_bytes | Memory in bytes from New Relic |
+| `linux_distribution` | newrelic.linux_distribution | Linux distro from New Relic |
+| `service` | newrelic.service | Service custom attribute |
+| `nr_environment` | newrelic.environment | Environment from New Relic |
+| `team` | newrelic.team | Team custom attribute |
+| `nr_location` | newrelic.location | Location from New Relic |
+| `account_id` | newrelic.account_id | New Relic account ID |
+| `sys_id` | cmdb.sys_id | ServiceNow sys_id |
+| `os` | cmdb.os | OS name from CMDB |
+| `os_version` | cmdb.os_version | OS version from CMDB |
+| `cmdb_ip_address` | cmdb.ip_address | IP address from CMDB |
+| `cmdb_location` | cmdb.location | Location from CMDB |
+| `department` | cmdb.department | Department from CMDB |
+| `cmdb_environment` | cmdb.environment | Environment from CMDB |
+| `operational_status` | cmdb.operational_status | Operational status from CMDB |
+| `classification` | cmdb.classification | CI classification from CMDB |
+| `cmdb_last_synced` | cmdb.last_synced_at | Last CMDB sync timestamp |
+| `sources` | computed | Comma-separated list: `vsphere`, `newrelic`, `cmdb` |
 
 ---
 
@@ -123,6 +187,7 @@ CREATE TABLE vsphere (
     tools_status    TEXT    CHECK (tools_status IN ('toolsOk', 'toolsOld', 'toolsNotRunning', 'toolsNotInstalled')),
     ipv4_address    TEXT,
     ipv6_address    TEXT,
+    source_url      TEXT,
     last_synced_at  TEXT,
     created_at      TEXT    NOT NULL,
     updated_at      TEXT    NOT NULL,
@@ -143,6 +208,7 @@ CREATE TABLE vsphere (
 | `tools_status` | TEXT | YES | — | `toolsOk`, `toolsOld`, `toolsNotRunning`, `toolsNotInstalled` |
 | `ipv4_address` | TEXT | YES | — | Primary IPv4 address of the VM |
 | `ipv6_address` | TEXT | YES | — | Primary IPv6 address of the VM |
+| `source_url` | TEXT | YES | — | vCenter hostname this record was synced from |
 | `last_synced_at` | TEXT | YES | — | Last sync timestamp from vSphere API (ISO 8601 UTC) |
 | `created_at` | TEXT | NO | — | Record creation time (ISO 8601 UTC) |
 | `updated_at` | TEXT | NO | — | Last update time (ISO 8601 UTC) |
@@ -237,12 +303,12 @@ CREATE TABLE cmdb (
 
 ### 4.5 `credentials`
 
-Stores AES-256 encrypted connection credentials for vSphere and New Relic accounts. Multiple accounts per service are supported. Managed via the Settings UI.
+Stores AES-256 encrypted connection credentials for vSphere, New Relic, and CMDB accounts. Multiple accounts per service are supported. Managed via the Settings UI.
 
 ```sql
 CREATE TABLE credentials (
     id          INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-    service     TEXT    NOT NULL CHECK (service IN ('vsphere', 'newrelic')),
+    service     TEXT    NOT NULL CHECK (service IN ('vsphere', 'newrelic', 'cmdb')),
     name        TEXT    NOT NULL,
     config      TEXT    NOT NULL,
     enabled     INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
@@ -255,7 +321,7 @@ CREATE TABLE credentials (
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | `id` | INTEGER | NO | autoincrement | Surrogate primary key |
-| `service` | TEXT | NO | — | `vsphere` or `newrelic` |
+| `service` | TEXT | NO | — | `vsphere`, `newrelic`, or `cmdb` |
 | `name` | TEXT | NO | — | User-defined label e.g. `Name|AccountId` |
 | `config` | TEXT | NO | — | AES-256 encrypted JSON (see structure below) |
 | `enabled` | INTEGER | NO | `1` | `1` = used by sync job, `0` = disabled |
@@ -281,6 +347,18 @@ For `newrelic`:
 }
 ```
 
+For `cmdb`:
+```json
+{
+  "token_url": "https://your-instance.service-now.com/oauth_token.do",
+  "api_url": "https://your-instance.service-now.com/api/xci/cmdb_asset/getAssetDetails",
+  "client_id": "your-client-id",
+  "client_secret": "your-client-secret",
+  "username": "sync-user",
+  "password": "secret"
+}
+```
+
 **Encryption:** Config is encrypted with AES-256-GCM using the `ENCRYPTION_KEY` environment variable before storage and decrypted at runtime. The key is never stored in the database or source code.
 
 ---
@@ -292,7 +370,7 @@ One row per service. The sync jobs poll this table every minute and trigger when
 ```sql
 CREATE TABLE sync_schedule (
     id          INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-    service     TEXT    NOT NULL CHECK (service IN ('vsphere', 'newrelic')),
+    service     TEXT    NOT NULL CHECK (service IN ('vsphere', 'newrelic', 'cmdb')),
     cron_expr   TEXT    NOT NULL,
     enabled     INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
     description TEXT,
@@ -305,7 +383,7 @@ CREATE TABLE sync_schedule (
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | `id` | INTEGER | NO | autoincrement | Surrogate primary key |
-| `service` | TEXT | NO | — | `vsphere` or `newrelic` — one row per service |
+| `service` | TEXT | NO | — | `vsphere`, `newrelic`, or `cmdb` — one row per service |
 | `cron_expr` | TEXT | NO | — | Cron expression (6-field: seconds minutes hours dom month dow) |
 | `enabled` | INTEGER | NO | `1` | `1` = active, `0` = paused |
 | `description` | TEXT | YES | — | Human-readable label e.g. `Every day at 2:00 AM` |
@@ -326,13 +404,14 @@ CREATE TABLE sync_schedule (
 
 ## 5. Seed Data
 
-The initial migration inserts two default `sync_schedule` rows with `enabled = 0` (disabled). This ensures the sync jobs always find a row to read on first boot. Users enable and configure the schedule via the Settings UI.
+The initial migration inserts three default `sync_schedule` rows with `enabled = 0` (disabled). This ensures the sync jobs always find a row to read on first boot. Users enable and configure the schedule via the Settings UI.
 
 ```sql
 INSERT INTO sync_schedule (service, cron_expr, enabled, description, updated_at)
 VALUES
     ('vsphere',  '0 0 2 * * *',       0, 'Every day at 2:00 AM',  datetime('now')),
-    ('newrelic', '0 0 6 * * MON-FRI', 0, 'Weekdays at 6:00 AM',   datetime('now'));
+    ('newrelic', '0 0 6 * * MON-FRI', 0, 'Weekdays at 6:00 AM',   datetime('now')),
+    ('cmdb',     '0 0 3 * * *',       0, 'Every day at 3:00 AM',  datetime('now'));
 ```
 
 ---
@@ -341,10 +420,7 @@ VALUES
 
 | Table | Constraint | Type | Definition |
 |-------|------------|------|------------|
-| `inventory` | `PK` | Primary Key | `hostname` |
-| `inventory` | `chk_asset_type` | CHECK | `asset_type IN ('server','vm','container','network')` |
-| `inventory` | `chk_environment` | CHECK | `environment IN ('production','staging','dev','dr')` |
-| `inventory` | `chk_status` | CHECK | `status IN ('active','maintenance','decommissioned','unknown')` |
+| `inventory` | — | View | Read-only aggregation VIEW — no constraints |
 | `vsphere` | `PK` | Primary Key | `hostname` |
 | `vsphere` | `chk_power_state` | CHECK | `power_state IN ('poweredOn','poweredOff','suspended')` |
 | `vsphere` | `chk_tools_status` | CHECK | `tools_status IN ('toolsOk','toolsOld','toolsNotRunning','toolsNotInstalled')` |
@@ -354,9 +430,9 @@ VALUES
 | `cmdb` | — | — | No additional CHECK constraints; values are sourced from CMDB as-is |
 | `credentials` | `PK` | Primary Key | `id` (autoincrement) |
 | `credentials` | `uq_service_name` | Unique | `(service, name)` |
-| `credentials` | `chk_service` | CHECK | `service IN ('vsphere','newrelic')` |
+| `credentials` | `chk_service` | CHECK | `service IN ('vsphere','newrelic','cmdb')` |
 | `credentials` | `chk_enabled` | CHECK | `enabled IN (0, 1)` |
 | `sync_schedule` | `PK` | Primary Key | `id` (autoincrement) |
 | `sync_schedule` | `uq_service` | Unique | `service` |
-| `sync_schedule` | `chk_service` | CHECK | `service IN ('vsphere','newrelic')` |
+| `sync_schedule` | `chk_service` | CHECK | `service IN ('vsphere','newrelic','cmdb')` |
 | `sync_schedule` | `chk_enabled` | CHECK | `enabled IN (0, 1)` |

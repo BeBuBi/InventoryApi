@@ -1,10 +1,19 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, DestroyRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
+import { Subject } from 'rxjs';
+import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { InventoryService } from '../../core/services/inventory.service';
-import { Inventory } from '../../core/models/inventory.model';
+import { Inventory, InventoryCounts } from '../../core/models/inventory.model';
 import { PagedResponse } from '../../core/models/paged-response.model';
+
+interface ColumnDef {
+  key: keyof Inventory;
+  label: string;
+  visible: boolean;
+}
 
 @Component({
   selector: 'app-dashboard',
@@ -17,92 +26,196 @@ import { PagedResponse } from '../../core/models/paged-response.model';
       <!-- Summary cards -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <div class="bg-white rounded-lg shadow p-4">
-          <p class="text-sm text-gray-500">Total Assets</p>
-          <p class="text-3xl font-bold text-gray-800">{{ totalElements }}</p>
+          <p class="text-sm text-gray-500">Total Hosts</p>
+          <p class="text-3xl font-bold text-gray-800">{{ counts?.total ?? '—' }}</p>
         </div>
         <div class="bg-white rounded-lg shadow p-4">
-          <p class="text-sm text-gray-500">Active</p>
-          <p class="text-3xl font-bold text-green-600">{{ countByStatus('active') }}</p>
+          <p class="text-sm text-gray-500">In vSphere</p>
+          <p class="text-3xl font-bold text-blue-600">{{ counts?.vsphere ?? '—' }}</p>
         </div>
         <div class="bg-white rounded-lg shadow p-4">
-          <p class="text-sm text-gray-500">Maintenance</p>
-          <p class="text-3xl font-bold text-yellow-600">{{ countByStatus('maintenance') }}</p>
+          <p class="text-sm text-gray-500">In New Relic</p>
+          <p class="text-3xl font-bold text-green-600">{{ counts?.newrelic ?? '—' }}</p>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+          <p class="text-sm text-gray-500">In CMDB</p>
+          <p class="text-3xl font-bold text-orange-600">{{ counts?.cmdb ?? '—' }}</p>
         </div>
       </div>
 
-      <!-- Filters + Search -->
-      <div class="bg-white rounded-lg shadow p-4 mb-4 flex flex-wrap gap-3">
+      <!-- Search + Column picker -->
+      <div class="bg-white rounded-lg shadow p-4 mb-4 flex flex-wrap gap-3 items-center">
         <input
           [(ngModel)]="search"
-          (ngModelChange)="onFilter()"
+          (ngModelChange)="onSearchChange()"
           placeholder="Search hostname..."
-          class="border border-gray-300 rounded px-3 py-2 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          class="border border-gray-300 rounded-md px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          aria-label="Search hostnames"
         />
-        <select [(ngModel)]="filterEnv" (ngModelChange)="onFilter()"
-                class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none">
-          <option value="">All Environments</option>
-          <option value="production">Production</option>
-          <option value="staging">Staging</option>
-          <option value="dev">Dev</option>
-          <option value="dr">DR</option>
-        </select>
-        <select [(ngModel)]="filterStatus" (ngModelChange)="onFilter()"
-                class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none">
-          <option value="">All Statuses</option>
-          <option value="active">Active</option>
-          <option value="maintenance">Maintenance</option>
-          <option value="decommissioned">Decommissioned</option>
-          <option value="unknown">Unknown</option>
-        </select>
-        <select [(ngModel)]="filterType" (ngModelChange)="onFilter()"
-                class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none">
-          <option value="">All Types</option>
-          <option value="server">Server</option>
-          <option value="vm">VM</option>
-          <option value="container">Container</option>
-          <option value="network">Network</option>
-        </select>
+
+        <!-- Column picker button -->
+        <div class="relative ml-auto">
+          <button (click)="showColumnPicker = !showColumnPicker"
+                  class="flex items-center gap-1 px-3 py-2 border border-gray-300 rounded text-sm text-gray-600 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  aria-label="Toggle column picker">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7" />
+            </svg>
+            Columns
+            <span class="bg-blue-100 text-blue-700 text-xs font-medium px-1.5 py-0.5 rounded">
+              {{ visibleColumns.length }}
+            </span>
+          </button>
+
+          <!-- Dropdown panel -->
+          <div *ngIf="showColumnPicker"
+               class="absolute right-0 top-10 z-20 bg-white border border-gray-200 rounded-lg shadow-lg w-64 p-3">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Show / Reorder Columns</span>
+              <button (click)="showColumnPicker = false" class="text-gray-400 hover:text-gray-600 text-lg leading-none">&times;</button>
+            </div>
+            <div class="space-y-1 max-h-80 overflow-y-auto pr-1">
+              <div *ngFor="let col of columns; let i = index"
+                   class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50">
+                <!-- Up / Down -->
+                <div class="flex flex-col gap-0.5">
+                  <button (click)="moveColumn(i, -1)" [disabled]="i === 0"
+                          class="text-gray-300 hover:text-gray-600 disabled:opacity-20 leading-none text-xs">&#9650;</button>
+                  <button (click)="moveColumn(i, 1)" [disabled]="i === columns.length - 1"
+                          class="text-gray-300 hover:text-gray-600 disabled:opacity-20 leading-none text-xs">&#9660;</button>
+                </div>
+                <!-- Checkbox -->
+                <input type="checkbox" [(ngModel)]="col.visible" (ngModelChange)="refreshVisibleColumns()"
+                       class="w-4 h-4 accent-blue-600 cursor-pointer" />
+                <span class="text-sm text-gray-700 select-none cursor-pointer"
+                      (click)="col.visible = !col.visible; refreshVisibleColumns()">{{ col.label }}</span>
+              </div>
+            </div>
+            <div class="mt-3 pt-2 border-t border-gray-100 flex justify-between">
+              <button (click)="resetColumns()"
+                      class="text-xs text-gray-400 hover:text-gray-600">Reset defaults</button>
+              <span class="text-xs text-gray-400">{{ visibleColumns.length }} of {{ columns.length }}</span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <!-- Inventory table -->
-      <div class="bg-white rounded-lg shadow overflow-hidden">
-        <table class="min-w-full divide-y divide-gray-200 text-sm">
+      <!-- Asset table -->
+      <div class="bg-white rounded-lg shadow overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 text-sm" aria-label="Aggregated asset inventory">
           <thead class="bg-gray-50">
             <tr>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hostname</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">IP Address</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Environment</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Owner</th>
+              <!-- Hostname is always first and always visible -->
+              <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Hostname</th>
+              <th *ngFor="let col of visibleColumns; trackBy: trackByColKey"
+                  scope="col"
+                  class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                {{ col.label }}
+              </th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
-            <tr *ngFor="let item of items" class="hover:bg-gray-50">
-              <td class="px-4 py-3">
-                <a [routerLink]="['/inventory', item.hostname]"
-                   class="text-blue-600 hover:underline font-medium">{{ item.hostname }}</a>
-              </td>
-              <td class="px-4 py-3 text-gray-600">{{ item.ipAddress }}</td>
-              <td class="px-4 py-3">
-                <span class="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700">{{ item.assetType }}</span>
-              </td>
-              <td class="px-4 py-3 text-gray-600">{{ item.environment }}</td>
-              <td class="px-4 py-3">
-                <span [class]="statusClass(item.status)"
-                      class="px-2 py-0.5 rounded text-xs font-medium">{{ item.status }}</span>
-              </td>
-              <td class="px-4 py-3 text-gray-600">{{ item.owner || '—' }}</td>
+            <tr *ngIf="loading">
+              <td [attr.colspan]="visibleColumns.length + 1" class="px-4 py-8 text-center text-gray-400">Loading...</td>
             </tr>
-            <tr *ngIf="items.length === 0">
-              <td colspan="6" class="px-4 py-8 text-center text-gray-400">No records found</td>
-            </tr>
+            <ng-container *ngIf="!loading">
+              <tr *ngFor="let item of items; trackBy: trackByHostname" class="hover:bg-gray-50">
+                <!-- Fixed hostname column -->
+                <td class="px-4 py-3 whitespace-nowrap">
+                  <a [routerLink]="['/inventory', item.hostname]"
+                     class="text-blue-600 hover:underline font-medium">{{ item.hostname }}</a>
+                </td>
+                <!-- Dynamic columns -->
+                <td *ngFor="let col of visibleColumns; trackBy: trackByColKey"
+                    class="px-4 py-3 whitespace-nowrap">
+                  <ng-container [ngSwitch]="col.key">
+
+                    <!-- cmdbIpAddress — orange pill -->
+                    <ng-container *ngSwitchCase="'cmdbIpAddress'">
+                      <span *ngIf="item.cmdbIpAddress"
+                            class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                        {{ sortIps(item.cmdbIpAddress) }}
+                      </span>
+                      <span *ngIf="!item.cmdbIpAddress" class="text-gray-400">—</span>
+                    </ng-container>
+
+                    <!-- vsphereIpv4 — blue pill -->
+                    <ng-container *ngSwitchCase="'vsphereIpv4'">
+                      <span *ngIf="item.vsphereIpv4"
+                            class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        {{ sortIps(item.vsphereIpv4) }}
+                      </span>
+                      <span *ngIf="!item.vsphereIpv4" class="text-gray-400">—</span>
+                    </ng-container>
+
+                    <!-- nrIpv4 — green pill -->
+                    <ng-container *ngSwitchCase="'nrIpv4'">
+                      <span *ngIf="item.nrIpv4"
+                            class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        {{ sortIps(item.nrIpv4) }}
+                      </span>
+                      <span *ngIf="!item.nrIpv4" class="text-gray-400">—</span>
+                    </ng-container>
+
+                    <!-- sources — source badge rendering -->
+                    <ng-container *ngSwitchCase="'sources'">
+                      <span *ngFor="let src of parseSources(item.sources)"
+                            [class]="sourceBadgeClass(src)"
+                            class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium mr-1">
+                        {{ sourceLabel(src) }}
+                      </span>
+                      <span *ngIf="!item.sources" class="text-gray-400">—</span>
+                    </ng-container>
+
+                    <!-- powerState — colored badge -->
+                    <ng-container *ngSwitchCase="'powerState'">
+                      <span *ngIf="item.powerState"
+                            [class]="powerStateClass(item.powerState)"
+                            class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium">
+                        {{ item.powerState }}
+                      </span>
+                      <span *ngIf="!item.powerState" class="text-gray-400">—</span>
+                    </ng-container>
+
+                    <!-- operationalStatus — colored badge -->
+                    <ng-container *ngSwitchCase="'operationalStatus'">
+                      <span *ngIf="item.operationalStatus"
+                            [class]="opStatusClass(item.operationalStatus)"
+                            class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium">
+                        {{ item.operationalStatus }}
+                      </span>
+                      <span *ngIf="!item.operationalStatus" class="text-gray-400">—</span>
+                    </ng-container>
+
+                    <!-- All other columns — plain text -->
+                    <ng-container *ngSwitchDefault>
+                      <span class="text-gray-600">{{ item[col.key] ?? '—' }}</span>
+                    </ng-container>
+
+                  </ng-container>
+                </td>
+              </tr>
+              <tr *ngIf="items.length === 0">
+                <td [attr.colspan]="visibleColumns.length + 1" class="px-4 py-8 text-center text-gray-400">No records found</td>
+              </tr>
+            </ng-container>
           </tbody>
         </table>
 
         <!-- Pagination -->
         <div class="px-4 py-3 border-t border-gray-200 flex items-center justify-between text-sm text-gray-600">
-          <span>{{ totalElements }} total records</span>
+          <div class="flex items-center gap-2">
+            <span class="text-gray-500">Rows:</span>
+            <select [(ngModel)]="pageSize" (ngModelChange)="onPageSizeChange()"
+                    class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none">
+              <option [value]="25">25</option>
+              <option [value]="50">50</option>
+              <option [value]="100">100</option>
+            </select>
+            <span class="text-gray-400">&middot;</span>
+            <span>{{ counts?.total ?? 0 }} total hosts</span>
+          </div>
           <div class="flex gap-2">
             <button (click)="prevPage()" [disabled]="currentPage === 0"
                     class="px-3 py-1 border rounded disabled:opacity-40 hover:bg-gray-50">Prev</button>
@@ -117,54 +230,175 @@ import { PagedResponse } from '../../core/models/paged-response.model';
 })
 export class DashboardComponent implements OnInit {
   private inventoryService = inject(InventoryService);
+  private destroyRef: DestroyRef = inject(DestroyRef);
+
+  private searchTrigger$ = new Subject<void>();
 
   items: Inventory[] = [];
-  totalElements = 0;
+  counts?: InventoryCounts;
   totalPages = 0;
   currentPage = 0;
+  pageSize = 25;
   search = '';
-  filterEnv = '';
-  filterStatus = '';
-  filterType = '';
+  loading = false;
+  showColumnPicker = false;
+
+  // All pickable columns (hostname is fixed — not in this array).
+  columns: ColumnDef[] = [
+    { key: 'cmdbIpAddress',    label: 'IP (CMDB)',          visible: true  },
+    { key: 'vsphereIpv4',      label: 'IP (vSphere)',        visible: true  },
+    { key: 'nrIpv4',           label: 'IP (New Relic)',      visible: true  },
+    { key: 'sources',          label: 'Sources',             visible: true  },
+    { key: 'powerState',       label: 'Power State',         visible: false },
+    { key: 'operationalStatus',label: 'Op. Status',          visible: false },
+    { key: 'guestOs',          label: 'Guest OS',            visible: false },
+    { key: 'os',               label: 'OS',                  visible: false },
+    { key: 'cmdbEnvironment',  label: 'Environment (CMDB)',  visible: false },
+    { key: 'nrEnvironment',    label: 'Environment (NR)',    visible: false },
+    { key: 'cmdbLocation',     label: 'Location (CMDB)',     visible: false },
+    { key: 'nrLocation',       label: 'Location (NR)',       visible: false },
+    { key: 'team',             label: 'Team',                visible: false },
+    { key: 'service',          label: 'Service',             visible: false },
+  ];
+
+  private readonly defaultColumns = this.columns.map(c => ({ key: c.key, visible: c.visible }));
+
+  visibleColumns: ColumnDef[] = [];
 
   ngOnInit(): void {
+    this.refreshVisibleColumns();
+
+    this.inventoryService.getCounts()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({ next: c => this.counts = c });
+
+    this.searchTrigger$.pipe(
+      debounceTime(300),
+      distinctUntilChanged(),
+      switchMap(() => {
+        this.loading = true;
+        return this.inventoryService.list({
+          search: this.search,
+          page: this.currentPage,
+          size: this.pageSize
+        });
+      }),
+      takeUntilDestroyed(this.destroyRef)
+    ).subscribe({
+      next: (res: PagedResponse<Inventory>) => {
+        this.items = res.content;
+        this.totalPages = res.totalPages;
+        this.loading = false;
+      },
+      error: () => { this.loading = false; }
+    });
+
     this.load();
   }
 
-  onFilter(): void {
+  onSearchChange(): void {
     this.currentPage = 0;
-    this.load();
+    this.searchTrigger$.next();
   }
 
   load(): void {
+    this.loading = true;
     this.inventoryService.list({
       search: this.search,
-      environment: this.filterEnv,
-      status: this.filterStatus,
-      assetType: this.filterType,
       page: this.currentPage,
       size: 20
-    }).subscribe((res: PagedResponse<Inventory>) => {
-      this.items = res.content;
-      this.totalElements = res.totalElements;
-      this.totalPages = res.totalPages;
+    }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (res: PagedResponse<Inventory>) => {
+        this.items = res.content;
+        this.totalPages = res.totalPages;
+        this.loading = false;
+      },
+      error: () => { this.loading = false; }
     });
   }
+
+  onPageSizeChange(): void { this.currentPage = 0; this.load(); }
 
   prevPage(): void { this.currentPage--; this.load(); }
   nextPage(): void { this.currentPage++; this.load(); }
 
-  countByStatus(status: string): number {
-    return this.items.filter(i => i.status === status).length;
+  refreshVisibleColumns(): void {
+    this.visibleColumns = this.columns.filter(c => c.visible);
   }
 
-  statusClass(status: string): string {
-    return {
-      active: 'bg-green-100 text-green-800',
-      maintenance: 'bg-yellow-100 text-yellow-800',
-      decommissioned: 'bg-gray-100 text-gray-500',
-      unknown: 'bg-red-100 text-red-700'
-    }[status] ?? 'bg-gray-100 text-gray-600';
+  moveColumn(index: number, direction: -1 | 1): void {
+    const target = index + direction;
+    if (target < 0 || target >= this.columns.length) return;
+    [this.columns[index], this.columns[target]] = [this.columns[target], this.columns[index]];
+    this.refreshVisibleColumns();
   }
 
+  resetColumns(): void {
+    const ordered = this.defaultColumns.map(d => this.columns.find(c => c.key === d.key)!);
+    ordered.forEach((col, i) => { col.visible = this.defaultColumns[i].visible; });
+    this.columns = ordered;
+    this.refreshVisibleColumns();
+  }
+
+  trackByHostname(_index: number, item: Inventory): string {
+    return item.hostname;
+  }
+
+  trackByColKey(_index: number, col: ColumnDef): string {
+    return col.key;
+  }
+
+  parseSources(sources?: string): string[] {
+    if (!sources) return [];
+    return sources.split(',').map(s => s.trim()).filter(s => s.length > 0);
+  }
+
+  sourceLabel(src: string): string {
+    return ({ vsphere: 'VS', newrelic: 'NR', cmdb: 'CMDB' } as Record<string, string>)[src] ?? src;
+  }
+
+  sourceBadgeClass(src: string): string {
+    return ({
+      vsphere: 'bg-blue-100 text-blue-800',
+      newrelic: 'bg-green-100 text-green-800',
+      cmdb: 'bg-orange-100 text-orange-800'
+    } as Record<string, string>)[src] ?? 'bg-gray-100 text-gray-600';
+  }
+
+  powerStateClass(state?: string): string {
+    return ({
+      poweredOn:  'bg-green-100 text-green-800',
+      poweredOff: 'bg-gray-100 text-gray-600',
+      suspended:  'bg-yellow-100 text-yellow-800',
+    } as Record<string, string>)[state ?? ''] ?? 'bg-gray-100 text-gray-500';
+  }
+
+  opStatusClass(status?: string): string {
+    const s = (status ?? '').toLowerCase();
+    if (s === 'operational' || s === 'in service') return 'bg-green-100 text-green-800';
+    if (s === 'maintenance')                        return 'bg-yellow-100 text-yellow-800';
+    if (s === 'decommissioned' || s === 'retired')  return 'bg-gray-100 text-gray-500';
+    return 'bg-gray-100 text-gray-600';
+  }
+
+  sortIps(value: string | undefined): string {
+    if (!value || value.trim() === '') return '—';
+    const parts = value.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    const ipv4Re = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+    parts.sort((a, b) => {
+      const ma = ipv4Re.exec(a);
+      const mb = ipv4Re.exec(b);
+      if (ma && mb) {
+        for (let i = 1; i <= 4; i++) {
+          const diff = parseInt(ma[i], 10) - parseInt(mb[i], 10);
+          if (diff !== 0) return diff;
+        }
+        return 0;
+      }
+      if (ma) return -1;
+      if (mb) return 1;
+      return a.localeCompare(b);
+    });
+    return parts.join(', ');
+  }
 }

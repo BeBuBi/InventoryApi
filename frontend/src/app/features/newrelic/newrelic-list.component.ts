@@ -147,10 +147,9 @@ const IP_COLS      = new Set<keyof NewRelicRecord>(['ipv4Address', 'ipv6Address'
             <span class="text-gray-500">Rows:</span>
             <select [(ngModel)]="pageSize" (ngModelChange)="onPageSizeChange()"
                     class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none">
-              <option [value]="20">20</option>
+              <option [value]="25">25</option>
               <option [value]="50">50</option>
               <option [value]="100">100</option>
-              <option [value]="200">200</option>
             </select>
             <span class="text-gray-400">&middot;</span>
             <span>{{ totalElements }} records</span>
@@ -178,7 +177,7 @@ export class NewRelicListComponent implements OnInit {
   totalElements = 0;
   totalPages = 0;
   currentPage = 0;
-  pageSize = 20;
+  pageSize = 25;
   search = '';
   filterEnv = '';
   filterAccountId = '';

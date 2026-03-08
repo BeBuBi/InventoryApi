@@ -28,4 +28,7 @@ frontend/.angular/
 # Environment / secrets
 .env
 *.env.local
+
+# Credential seed file (contains plain-text passwords — never commit)
+src/main/resources/credentials-seed.json
 .claude/

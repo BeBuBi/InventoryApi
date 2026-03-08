@@ -2,59 +2,57 @@ package com.example.inventorysystem.model;
 
 import jakarta.persistence.*;
 import lombok.Getter;
-import lombok.Setter;
+import org.hibernate.annotations.Immutable;
 
-import java.time.LocalDateTime;
-
+@Immutable
 @Entity
 @Table(name = "inventory")
 @Getter
-@Setter
 public class Inventory {
 
     @Id
-    @Column(name = "hostname", nullable = false)
+    @Column(name = "hostname")
     private String hostname;
 
-    @Column(name = "ip_address", nullable = false)
-    private String ipAddress;
+    // vSphere fields
+    @Column(name = "vsphere_ipv4")          private String vsphereIpv4;
+    @Column(name = "vsphere_ipv6")          private String vsphereIpv6;
+    @Column(name = "vm_name")               private String vmName;
+    @Column(name = "cpu_count")             private Integer cpuCount;
+    @Column(name = "cpu_cores")             private Integer cpuCores;
+    @Column(name = "memory_mb")             private Integer memoryMb;
+    @Column(name = "memory_gb")             private Integer memoryGb;
+    @Column(name = "power_state")           private String powerState;
+    @Column(name = "guest_os")              private String guestOs;
+    @Column(name = "tools_status")          private String toolsStatus;
+    @Column(name = "vsphere_last_synced")   private String vsphereLastSynced;
 
-    @Column(name = "asset_type", nullable = false)
-    private String assetType;
+    // New Relic fields
+    @Column(name = "full_hostname")         private String fullHostname;
+    @Column(name = "nr_ipv4")               private String nrIpv4;
+    @Column(name = "nr_ipv6")               private String nrIpv6;
+    @Column(name = "processor_count")       private Integer processorCount;
+    @Column(name = "core_count")            private Integer coreCount;
+    @Column(name = "system_memory_bytes")   private Long systemMemoryBytes;
+    @Column(name = "linux_distribution")    private String linuxDistribution;
+    @Column(name = "service")               private String service;
+    @Column(name = "nr_environment")        private String nrEnvironment;
+    @Column(name = "team")                  private String team;
+    @Column(name = "nr_location")           private String nrLocation;
+    @Column(name = "account_id")            private String accountId;
 
-    @Column(name = "environment", nullable = false)
-    private String environment;
+    // CMDB fields
+    @Column(name = "sys_id")                private String sysId;
+    @Column(name = "os")                    private String os;
+    @Column(name = "os_version")            private String osVersion;
+    @Column(name = "cmdb_ip_address")       private String cmdbIpAddress;
+    @Column(name = "cmdb_location")         private String cmdbLocation;
+    @Column(name = "department")            private String department;
+    @Column(name = "cmdb_environment")      private String cmdbEnvironment;
+    @Column(name = "operational_status")    private String operationalStatus;
+    @Column(name = "classification")        private String classification;
+    @Column(name = "cmdb_last_synced")      private String cmdbLastSynced;
 
-    @Column(name = "owner")
-    private String owner;
-
-    @Column(name = "location")
-    private String location;
-
-    @Column(name = "status", nullable = false)
-    private String status;
-
-    @Column(name = "warranty_expiry")
-    private String warrantyExpiry;
-
-    @Column(name = "last_patched_at")
-    private String lastPatchedAt;
-
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private String createdAt;
-
-    @Column(name = "updated_at", nullable = false)
-    private String updatedAt;
-
-    @PrePersist
-    protected void onCreate() {
-        String now = LocalDateTime.now().toString();
-        if (createdAt == null) createdAt = now;
-        updatedAt = now;
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = LocalDateTime.now().toString();
-    }
+    // Meta
+    @Column(name = "sources")              private String sources;
 }

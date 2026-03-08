@@ -5,26 +5,6 @@
 -- ============================================================
 
 -- ------------------------------------------------------------
--- inventory
--- Core asset registry. hostname is the natural primary key
--- and the join key across vsphere, newrelic, and cmdb tables.
--- ------------------------------------------------------------
-CREATE TABLE inventory (
-    hostname        TEXT    NOT NULL,
-    ip_address      TEXT    NOT NULL,
-    asset_type      TEXT    NOT NULL CHECK (asset_type IN ('server', 'vm', 'container', 'network')),
-    environment     TEXT    NOT NULL CHECK (environment IN ('production', 'staging', 'dev', 'dr')),
-    owner           TEXT,
-    location        TEXT,
-    status          TEXT    NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'maintenance', 'decommissioned', 'unknown')),
-    warranty_expiry TEXT,
-    last_patched_at TEXT,
-    created_at      TEXT    NOT NULL,
-    updated_at      TEXT    NOT NULL,
-    PRIMARY KEY (hostname)
-);
-
--- ------------------------------------------------------------
 -- vsphere
 -- VMware vSphere VM metadata. Populated by the vSphere sync
 -- job. Correlated to inventory via hostname.
@@ -41,6 +21,7 @@ CREATE TABLE vsphere (
     tools_status    TEXT    CHECK (tools_status IN ('toolsOk', 'toolsOld', 'toolsNotRunning', 'toolsNotInstalled')),
     ipv4_address    TEXT,
     ipv6_address    TEXT,
+    source_url      TEXT,
     last_synced_at  TEXT,
     created_at      TEXT    NOT NULL,
     updated_at      TEXT    NOT NULL,
@@ -93,6 +74,72 @@ CREATE TABLE cmdb (
     updated_at          TEXT    NOT NULL,
     PRIMARY KEY (hostname)
 );
+
+-- ------------------------------------------------------------
+-- inventory (VIEW)
+-- Unified read-only view aggregating vsphere, newrelic, and
+-- cmdb by hostname. Each field is sourced directly from its
+-- origin table with no merging.
+-- ------------------------------------------------------------
+CREATE VIEW inventory AS
+SELECT
+    h.hostname,
+    -- vSphere fields
+    v.ipv4_address          AS vsphere_ipv4,
+    v.ipv6_address          AS vsphere_ipv6,
+    v.vm_name,
+    v.cpu_count,
+    v.cpu_cores,
+    v.memory_mb,
+    v.memory_gb,
+    v.power_state,
+    v.guest_os,
+    v.tools_status,
+    v.last_synced_at        AS vsphere_last_synced,
+    -- New Relic fields
+    n.full_hostname,
+    n.ipv4_address          AS nr_ipv4,
+    n.ipv6_address          AS nr_ipv6,
+    n.processor_count,
+    n.core_count,
+    n.system_memory_bytes,
+    n.linux_distribution,
+    n.service,
+    n.environment           AS nr_environment,
+    n.team,
+    n.location              AS nr_location,
+    n.account_id,
+    -- CMDB fields
+    c.sys_id,
+    c.os,
+    c.os_version,
+    c.ip_address            AS cmdb_ip_address,
+    c.location              AS cmdb_location,
+    c.department,
+    c.environment           AS cmdb_environment,
+    c.operational_status,
+    c.classification,
+    c.last_synced_at        AS cmdb_last_synced,
+    -- Meta
+    CASE
+        WHEN v.hostname IS NOT NULL AND n.hostname IS NOT NULL AND c.hostname IS NOT NULL THEN 'vsphere,newrelic,cmdb'
+        WHEN v.hostname IS NOT NULL AND n.hostname IS NOT NULL                           THEN 'vsphere,newrelic'
+        WHEN v.hostname IS NOT NULL AND c.hostname IS NOT NULL                           THEN 'vsphere,cmdb'
+        WHEN n.hostname IS NOT NULL AND c.hostname IS NOT NULL                           THEN 'newrelic,cmdb'
+        WHEN v.hostname IS NOT NULL                                                      THEN 'vsphere'
+        WHEN n.hostname IS NOT NULL                                                      THEN 'newrelic'
+        ELSE                                                                                  'cmdb'
+    END AS sources
+FROM (
+    SELECT hostname FROM vsphere
+    UNION
+    SELECT hostname FROM newrelic
+    UNION
+    SELECT hostname FROM cmdb
+) h
+LEFT JOIN vsphere  v ON h.hostname = v.hostname
+LEFT JOIN newrelic n ON h.hostname = n.hostname
+LEFT JOIN cmdb     c ON h.hostname = c.hostname;
 
 -- ------------------------------------------------------------
 -- credentials

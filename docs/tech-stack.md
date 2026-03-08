@@ -1,8 +1,8 @@
 # Technology Stack
 ## Server Inventory System
 
-**Version:** 1.0
-**Last Updated:** 2026-03-03
+**Version:** 1.1
+**Last Updated:** 2026-03-07
 
 ---
 
@@ -113,7 +113,7 @@ spring.flyway.baseline-on-migrate=false
 | JJWT | 0.12.x (`io.jsonwebtoken:jjwt-api`) | JWT token creation and validation |
 | Spring Security | (included) | Security filter chain, JWT filter |
 
-JWT tokens are validated in a `OncePerRequestFilter` before every request. The signing key is set via the `JWT_SECRET` environment variable.
+**Note:** JWT authentication is currently **not yet enforced**. Spring Security is configured with `permitAll()` for all routes. The `OncePerRequestFilter` and `JWT_SECRET` environment variable are not yet wired in. JWT enforcement is planned for a future iteration.
 
 ---
 
@@ -187,7 +187,7 @@ TailwindCSS integrates with Angular via PostCSS and works alongside Angular's co
 
 `HttpClient` is Angular's built-in HTTP module. It supports interceptors for JWT attachment and centralized error handling — no third-party library needed.
 
-**JWT interceptor pattern:**
+**JWT interceptor pattern (planned — not yet implemented):**
 ```typescript
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const token = inject(AuthService).getToken();
@@ -255,7 +255,7 @@ export const environment = {
 
 | Concern | Technology | Detail |
 |---------|------------|--------|
-| Authentication | JWT (JJWT 0.12) | Bearer token, validated on every request |
+| Authentication | JWT (JJWT 0.12) — **planned, not yet enforced** | Spring Security currently uses `permitAll()`; JWT filter not yet implemented |
 | Credential encryption | AES-256-GCM (JDK) | Applied before writing to DB, reversed on read |
 | Encryption key storage | Kubernetes Secret | Injected as `ENCRYPTION_KEY` env variable |
 | HTTPS | TLS at Kubernetes LoadBalancer | Terminated at the service boundary |
@@ -310,7 +310,7 @@ export const environment = {
 | Attribute | Detail |
 |-----------|--------|
 | API | vSphere REST API (vCenter Server API) |
-| Authentication | Session-based (POST `/rest/com/vmware/cis/session`) |
+| Authentication | Session-based (POST `/api/session` — vSphere 8.x REST API) |
 | Transport | HTTPS |
 | Client | Spring `RestClient` |
 | Trigger | Scheduled (cron via `sync_schedule` table) or manual (`POST /api/vsphere/sync`) |

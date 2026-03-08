@@ -93,6 +93,7 @@ public class VsphereSyncJob {
         entity.setToolsStatus(vm.toolsStatus());
         entity.setIpv4Address(vm.ipv4Address());
         entity.setIpv6Address(vm.ipv6Address());
+        entity.setSourceUrl(vm.sourceUrl());
         entity.setLastSyncedAt(LocalDateTime.now().toString());
         vsphereRepository.save(entity);
     }

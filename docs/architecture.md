@@ -1,7 +1,7 @@
 # Architecture Overview
 ## Server Inventory System
 
-**Version:** 1.1
+**Version:** 1.2
 **Author:** Solo Developer
 **Last Updated:** 2026-03-07
 **Status:** Draft
@@ -15,7 +15,7 @@
 3. [System Diagram](#3-system-diagram)
 4. [Services](#4-services)
    - [Backend Service](#41-backend-service)
-   - [Frontend (React)](#42-frontend-react)
+   - [Frontend (Angular)](#42-frontend-angular)
 5. [Data Flow](#5-data-flow)
 6. [Database Design](#6-database-design)
 7. [API Design](#7-api-design)
@@ -39,7 +39,7 @@ The backend service handles all responsibilities in one place — inventory mana
 |---------|----------|-----------|
 | Structure | Monolith (single Spring Boot app) | Simpler to develop, deploy, and maintain for a solo project |
 | Communication | Direct internal calls | No inter-service HTTP overhead |
-| Frontend | Separate React SPA | Decoupled UI, better developer experience |
+| Frontend | Separate Angular SPA | Decoupled UI, better developer experience |
 | Database | Single SQLite file | Lightweight, no external DB server required |
 | Credentials | Stored in database, editable via UI | No redeployment needed when credentials change |
 | Deployment | Kubernetes | Container orchestration, scaling, and self-healing |
@@ -62,6 +62,7 @@ The backend service handles all responsibilities in one place — inventory mana
                         │         Port: 8080                   │
                         │  ─────────────────────────────────  │
                         │  InventoryController                 │
+                        │  DashboardController                 │
                         │  VsphereController                   │
                         │  NewRelicController                  │
                         │  CmdbController                      │
@@ -104,9 +105,9 @@ The backend service handles all responsibilities in one place — inventory mana
 **Kubernetes:** Deployment + LoadBalancer Service
 
 **Responsibilities:**
-- Manage the `inventory` table (CRUD operations)
-- Expose unified search and filter endpoints across all data source tables
-- Perform SQL JOINs across `inventory`, `vsphere`, and `newrelic` tables
+- Expose unified read-only search and filter endpoints over the `inventory` VIEW
+- Provide dashboard aggregation endpoint (`GET /api/dashboard/assets`) for the Angular frontend
+- Seed initial credentials on startup from `credentials-seed.json` if present on the classpath
 - Sync VM data from vSphere on a configurable schedule
 - Sync entity data from New Relic on a configurable schedule
 - Sync asset data from ServiceNow CMDB on a configurable schedule (OAuth2 password grant)
@@ -117,11 +118,11 @@ The backend service handles all responsibilities in one place — inventory mana
 
 **Key Endpoints:**
 ```
-GET    /api/inventory                    List all assets with vsphere+newrelic data (paginated, filterable)
-GET    /api/inventory/{hostname}         Get full asset detail (inventory + vsphere + newrelic)
-POST   /api/inventory                    Create new asset
-PUT    /api/inventory/{hostname}         Update asset
-DELETE /api/inventory/{hostname}         Delete asset
+GET    /api/inventory                    List all assets from inventory VIEW (paginated; filters: search, operationalStatus, sources)
+GET    /api/inventory/counts             Return asset counts: total, vsphere, newrelic, cmdb
+GET    /api/inventory/{hostname}         Get full flat asset detail (from inventory VIEW)
+
+GET    /api/dashboard/assets             Paginated search over inventory VIEW (search, page, size)
 
 GET    /api/vsphere                      List all vSphere records (paginated)
 GET    /api/vsphere/{hostname}           Get vSphere record by hostname
@@ -156,15 +157,13 @@ PATCH  /api/schedule/{service}/disable   Pause schedule for a service
 
 **Unified Search Query Example:**
 ```sql
-SELECT i.*, v.*, n.*
-FROM inventory i
-LEFT JOIN vsphere v ON i.hostname = v.hostname
-LEFT JOIN newrelic n ON i.hostname = n.hostname
-WHERE i.environment = 'production'
-  AND i.status = 'active'
-  AND v.power_state = 'poweredOn'
-  AND n.reporting = 1
-ORDER BY i.hostname
+-- inventory is a VIEW — the JOIN logic is inside the VIEW definition.
+-- Application queries run directly against it.
+SELECT * FROM inventory
+WHERE sources LIKE '%vsphere%'
+  AND operational_status = '1'
+  AND hostname LIKE '%web-prod%'
+ORDER BY hostname
 LIMIT 20 OFFSET 0;
 ```
 
@@ -233,6 +232,7 @@ Schedule: Fixed polling interval (every 1 minute) to check sync_schedule table
 com.example.inventorysystem
 ├── controller
 │   ├── InventoryController.java
+│   ├── DashboardController.java
 │   ├── VsphereController.java
 │   ├── NewRelicController.java
 │   ├── CmdbController.java
@@ -240,6 +240,8 @@ com.example.inventorysystem
 │   └── ScheduleController.java
 ├── service
 │   ├── InventoryService.java
+│   ├── DashboardService.java
+│   ├── CredentialSeedLoader.java
 │   ├── VsphereService.java
 │   ├── NewRelicService.java
 │   ├── CmdbService.java
@@ -266,8 +268,9 @@ com.example.inventorysystem
 │   ├── Credential.java
 │   └── SyncSchedule.java
 ├── dto
-│   ├── InventoryRequest.java
 │   ├── InventoryResponse.java
+│   ├── InventoryCountsResponse.java
+│   ├── PagedResponse.java
 │   ├── VsphereResponse.java
 │   ├── NewRelicResponse.java
 │   ├── CmdbResponse.java
@@ -286,6 +289,7 @@ com.example.inventorysystem
 
 ### 4.2 Frontend (Angular)
 
+
 **Technology:** Angular 18, Angular CLI, Angular HttpClient, TailwindCSS
 **Port:** 4200 (dev) / 80 (production via Nginx)
 **Kubernetes:** Deployment + LoadBalancer Service
@@ -295,7 +299,7 @@ com.example.inventorysystem
 - Communicate with backend exclusively via REST API
 - Display searchable, filterable inventory table
 - Display asset detail view with vSphere and New Relic data
-- Display summary metrics (total assets, by environment, by status)
+- Display summary metrics (total assets by source: vSphere, New Relic, CMDB, and total)
 
 **Key Routes:**
 ```
@@ -323,8 +327,8 @@ export const environment = {
 ### 5.1 User Views Inventory (Read Flow)
 ```
 1. User opens Angular app in browser
-2. Angular fetches GET /api/inventory from Backend Service
-3. Backend Service executes JOIN query across inventory, vsphere, newrelic tables
+2. Angular fetches GET /api/dashboard/assets from Backend Service
+3. Backend Service queries the inventory VIEW (JOIN logic handled inside the VIEW)
 4. Response flows back to Angular
 5. Angular renders the enriched inventory table
 ```
@@ -380,7 +384,7 @@ All data is stored in a **single SQLite database file** (`inventory.db`) owned b
 
 | Table | Access Type |
 |-------|-------------|
-| `inventory` | Read / Write + JOIN across all tables |
+| `inventory` | Read Only (SQL VIEW — never written to directly) |
 | `vsphere` | Read / Write (upsert during sync, query via API) |
 | `newrelic` | Read / Write (upsert during sync, query via API) |
 | `cmdb` | Read / Write (upsert during sync, query via API) |
@@ -600,11 +604,11 @@ env:
 
 **Credential flow:**
 ```
-1. Admin opens /settings/credentials in React UI
+1. Admin opens /settings/credentials in Angular UI
 2. Admin creates a new credential entry (e.g. "Name|AccountId")
 3. Admin enters service type, name, host/username/password or API key
 4. Admin sets enabled = true or false
-5. React calls POST /api/credentials to Backend Service
+5. Angular calls POST /api/credentials to Backend Service
 6. Backend Service encrypts the config JSON using AES-256 + ENCRYPTION_KEY
 7. Encrypted credential is saved to credentials table in inventory.db
 8. At next sync, Backend Service queries WHERE service = 'vsphere' AND enabled = 1
@@ -641,12 +645,12 @@ COPY --from=build /app/dist/inventory-app/browser /usr/share/nginx/html
 
 | Concern | Approach |
 |---------|----------|
-| Authentication | JWT token — issued on login, validated in Backend Service |
+| Authentication | JWT (JJWT 0.12) — **planned, not yet enforced**; Spring Security currently uses `permitAll()` |
 | vSphere, New Relic & CMDB credentials | Stored encrypted (AES-256) in database, editable via UI |
 | Encryption key | AES key stored as Kubernetes Secret, injected as env variable |
 | Credential masking | GET /api/credentials returns masked password/key (never plaintext) |
 | HTTPS | TLS terminated at Backend Service (LoadBalancer) |
-| CORS | Configured in Backend Service to allow React frontend origin only |
+| CORS | Configured in Backend Service to allow Angular frontend origin only |
 | No internal traffic | Single service — no inter-service communication needed |
 
 ---

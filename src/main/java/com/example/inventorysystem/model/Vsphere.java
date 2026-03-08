@@ -46,6 +46,9 @@ public class Vsphere {
     @Column(name = "ipv6_address")
     private String ipv6Address;
 
+    @Column(name = "source_url")
+    private String sourceUrl;
+
     @Column(name = "last_synced_at")
     private String lastSyncedAt;
 

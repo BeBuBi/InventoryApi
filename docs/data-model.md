@@ -1,7 +1,7 @@
 # Data Model
 ## Server Inventory System
 
-**Version:** 1.1
+**Version:** 1.2
 **Last Updated:** 2026-03-07
 **Database:** SQLite 3.x
 
@@ -25,15 +25,15 @@
 
 ## 1. Overview
 
-The data model consists of six tables stored in a single SQLite database file (`inventory.db`). All tables are independent — there are no foreign key constraints between them. The `hostname` field serves as the natural common key across `inventory`, `vsphere`, `newrelic`, and `cmdb`, allowing the application layer to correlate data via JOIN queries.
+The data model consists of five physical tables and one read-only SQL VIEW, all stored in a single SQLite database file (`inventory.db`). All tables are independent — there are no foreign key constraints between them. The `hostname` field serves as the natural common key across `vsphere`, `newrelic`, and `cmdb`; the `inventory` VIEW aggregates all three by hostname automatically.
 
-| Table | Purpose |
-|-------|---------|
-| `inventory` | Core asset registry — all managed servers, VMs, and containers |
+| Table / View | Purpose |
+|--------------|---------|
+| `inventory` | Read-only SQL VIEW — aggregated hostname index across `vsphere`, `newrelic`, and `cmdb` |
 | `vsphere` | VMware vSphere VM metadata, synced from vCenter API |
 | `newrelic` | New Relic monitoring data, synced from NerdGraph API |
 | `cmdb` | CMDB configuration item data, synced from ServiceNow |
-| `credentials` | Encrypted connection credentials for vSphere and New Relic accounts |
+| `credentials` | Encrypted connection credentials for vSphere, New Relic, and CMDB accounts |
 | `sync_schedule` | User-configured sync schedule (day + time) per service |
 
 ---
@@ -42,25 +42,36 @@ The data model consists of six tables stored in a single SQLite database file (`
 
 ```
 ┌─────────────────────────┐     ┌─────────────────────────┐
-│         inventory        │     │          vsphere         │
+│    inventory (VIEW)     │     │          vsphere         │
 │─────────────────────────│     │─────────────────────────│
-│ hostname (PK)           │     │ hostname (PK)            │
-│ ip_address              │     │ vm_name                  │
-│ asset_type              │     │ cpu_count                │
-│ environment             │     │ cpu_cores                │
-│ owner                   │     │ memory_mb                │
-│ location                │     │ memory_gb                │
-│ status                  │     │ power_state              │
-│ warranty_expiry         │     │ guest_os                 │
-│ last_patched_at         │     │ tools_status             │
-│ created_at              │     │ ipv4_address             │
-│ updated_at              │     │ ipv6_address             │
-└─────────────────────────┘     │ last_synced_at           │
-                                 │ tools_status             │
-                                 │ ipv4_address             │
-  Correlated by hostname         │ created_at               │
-  at application layer ─────────│ updated_at               │
-                                 └─────────────────────────┘
+│ hostname                │     │ hostname (PK)            │
+│ vsphere_ipv4            │     │ vm_name                  │
+│ vsphere_ipv6            │     │ cpu_count                │
+│ vm_name                 │     │ cpu_cores                │
+│ cpu_count, cpu_cores    │     │ memory_mb                │
+│ memory_mb, memory_gb    │     │ memory_gb                │
+│ power_state, guest_os   │     │ power_state              │
+│ tools_status            │     │ guest_os                 │
+│ vsphere_last_synced     │     │ tools_status             │
+│ full_hostname           │     │ ipv4_address             │
+│ nr_ipv4, nr_ipv6        │     │ ipv6_address             │
+│ processor_count         │     │ source_url               │
+│ core_count              │     │ last_synced_at           │
+│ system_memory_bytes     │     │ created_at               │
+│ linux_distribution      │     │ updated_at               │
+│ service, nr_environment │     └─────────────────────────┘
+│ team, nr_location       │
+│ account_id              │  Derived from vsphere, newrelic,
+│ sys_id, os, os_version  │  and cmdb via UNION + LEFT JOIN
+│ cmdb_ip_address         │  — never written to directly
+│ cmdb_location           │
+│ department              │
+│ cmdb_environment        │
+│ operational_status      │
+│ classification          │
+│ cmdb_last_synced        │
+│ sources                 │
+└─────────────────────────┘
 
 ┌─────────────────────────┐     ┌──────────────────────-───┐
 │         newrelic        │     │        credentials       │
@@ -105,31 +116,47 @@ The data model consists of six tables stored in a single SQLite database file (`
 
 ## 3. Tables
 
-### 3.1 `inventory`
+### 3.1 `inventory` (View — Read Only)
 
-Core asset registry. Every managed server, VM, or container must have a record here. The `hostname` is the primary key and the natural identifier used to correlate data with `vsphere` and `newrelic` tables.
+A read-only SQL VIEW that aggregates `vsphere`, `newrelic`, and `cmdb` by hostname. Never written to directly. The VIEW is the primary query target for the inventory API and dashboard.
 
-| Column          | Type    | Constraints               | Description                                      |
-|-----------------|---------|---------------------------|--------------------------------------------------|
-| hostname        | TEXT    | PK                        | Unique asset hostname — primary identifier       |
-| ip_address      | TEXT    | NOT NULL                  | Primary IPv4 or IPv6 address                     |
-| asset_type      | TEXT    | NOT NULL                  | `server`, `vm`, `container`, `network`           |
-| environment     | TEXT    | NOT NULL                  | `production`, `staging`, `dev`, `dr`             |
-| owner           | TEXT    |                           | Team or person responsible                       |
-| location        | TEXT    |                           | Data center, rack, or cloud region               |
-| status          | TEXT    | NOT NULL DEFAULT `active` | `active`, `maintenance`, `decommissioned`, `unknown` |
-| warranty_expiry | TEXT    |                           | Hardware warranty expiry date (ISO 8601)         |
-| last_patched_at | TEXT    |                           | Date/time of last OS patch (ISO 8601 UTC)        |
-| created_at      | TEXT    | NOT NULL                  | Record creation time (ISO 8601 UTC)              |
-| updated_at      | TEXT    | NOT NULL                  | Last update time (ISO 8601 UTC)                  |
-
-**Allowed values:**
-
-| Column      | Allowed Values                                           |
-|-------------|----------------------------------------------------------|
-| asset_type  | `server`, `vm`, `container`, `network`                   |
-| environment | `production`, `staging`, `dev`, `dr`                     |
-| status      | `active`, `maintenance`, `decommissioned`, `unknown`     |
+| Column               | Source                     | Description |
+|----------------------|----------------------------|-------------|
+| hostname             | UNION of all three tables  | Asset hostname — join key |
+| vsphere_ipv4         | vsphere.ipv4_address       | VM IPv4 address |
+| vsphere_ipv6         | vsphere.ipv6_address       | VM IPv6 address |
+| vm_name              | vsphere.vm_name            | VM display name |
+| cpu_count            | vsphere.cpu_count          | Number of vCPUs |
+| cpu_cores            | vsphere.cpu_cores          | Number of CPU cores |
+| memory_mb            | vsphere.memory_mb          | Memory in MB |
+| memory_gb            | vsphere.memory_gb          | Memory in GB |
+| power_state          | vsphere.power_state        | VM power state |
+| guest_os             | vsphere.guest_os           | Guest OS name |
+| tools_status         | vsphere.tools_status       | VMware Tools status |
+| vsphere_last_synced  | vsphere.last_synced_at     | Last vSphere sync timestamp |
+| full_hostname        | newrelic.full_hostname     | FQDN from New Relic |
+| nr_ipv4              | newrelic.ipv4_address      | IPv4 from New Relic |
+| nr_ipv6              | newrelic.ipv6_address      | IPv6 from New Relic |
+| processor_count      | newrelic.processor_count   | CPU count from New Relic |
+| core_count           | newrelic.core_count        | Core count from New Relic |
+| system_memory_bytes  | newrelic.system_memory_bytes | Memory in bytes from New Relic |
+| linux_distribution   | newrelic.linux_distribution | Linux distro |
+| service              | newrelic.service           | Service custom attribute |
+| nr_environment       | newrelic.environment       | Environment from New Relic |
+| team                 | newrelic.team              | Team custom attribute |
+| nr_location          | newrelic.location          | Location from New Relic |
+| account_id           | newrelic.account_id        | New Relic account ID |
+| sys_id               | cmdb.sys_id                | ServiceNow sys_id |
+| os                   | cmdb.os                    | OS name from CMDB |
+| os_version           | cmdb.os_version            | OS version from CMDB |
+| cmdb_ip_address      | cmdb.ip_address            | IP address from CMDB |
+| cmdb_location        | cmdb.location              | Location from CMDB |
+| department           | cmdb.department            | Department from CMDB |
+| cmdb_environment     | cmdb.environment           | Environment from CMDB |
+| operational_status   | cmdb.operational_status    | Operational status from CMDB |
+| classification       | cmdb.classification        | CI classification from CMDB |
+| cmdb_last_synced     | cmdb.last_synced_at        | Last CMDB sync timestamp |
+| sources              | computed                   | Comma-separated list: `vsphere`, `newrelic`, `cmdb` |
 
 ---
 
@@ -150,6 +177,7 @@ VMware vSphere VM metadata. Populated by the vSphere sync job. Each record corre
 | tools_status   | TEXT    |             | VMware Tools status                                 |
 | ipv4_address   | TEXT    |             | Primary IPv4 address of the VM                      |
 | ipv6_address   | TEXT    |             | Primary IPv6 address of the VM                      |
+| source_url     | TEXT    |             | vCenter hostname this record was synced from         |
 | last_synced_at | TEXT    |             | Last sync timestamp from vSphere API (ISO 8601 UTC) |
 | created_at     | TEXT    | NOT NULL    | Record creation time (ISO 8601 UTC)                 |
 | updated_at     | TEXT    | NOT NULL    | Last update time (ISO 8601 UTC)                     |
@@ -211,12 +239,12 @@ CMDB (Configuration Management Database) configuration item data. Populated by t
 
 ### 3.5 `credentials`
 
-Stores encrypted connection credentials for vSphere and New Relic accounts. Supports multiple accounts per service. Managed by the user via the Settings UI.
+Stores encrypted connection credentials for vSphere, New Relic, and CMDB accounts. Supports multiple accounts per service. Managed by the user via the Settings UI.
 
 | Column     | Type    | Constraints             | Description                                  |
 |------------|---------|-------------------------|----------------------------------------------|
 | id         | INTEGER | PK, AUTOINCREMENT       | Unique identifier                            |
-| service    | TEXT    | NOT NULL                | `vsphere` or `newrelic`                      |
+| service    | TEXT    | NOT NULL                | `vsphere`, `newrelic`, or `cmdb`             |
 | name       | TEXT    | NOT NULL                | User-defined label e.g. `Name|AccountId` |
 | config     | TEXT    | NOT NULL                | AES-256 encrypted JSON (see structure below) |
 | enabled    | INTEGER | NOT NULL DEFAULT 1      | `1` = used by sync job, `0` = disabled       |
@@ -246,10 +274,10 @@ For `newrelic`:
 
 **Allowed values:**
 
-| Column  | Allowed Values               |
-|---------|------------------------------|
-| service | `vsphere`, `newrelic`        |
-| enabled | `1` (active), `0` (disabled) |
+| Column  | Allowed Values                         |
+|---------|----------------------------------------|
+| service | `vsphere`, `newrelic`, `cmdb`          |
+| enabled | `1` (active), `0` (disabled)           |
 
 **Example rows:**
 
@@ -269,7 +297,7 @@ Stores the user-configured sync schedule per service. The Backend Service polls 
 | Column      | Type    | Constraints        | Description                                               |
 |-------------|---------|--------------------|-----------------------------------------------------------|
 | id          | INTEGER | PK, AUTOINCREMENT  | Unique identifier                                         |
-| service     | TEXT    | NOT NULL, UNIQUE   | `vsphere` or `newrelic`                                   |
+| service     | TEXT    | NOT NULL, UNIQUE   | `vsphere`, `newrelic`, or `cmdb`                          |
 | cron_expr   | TEXT    | NOT NULL           | Cron expression e.g. `0 0 2 * * *`                       |
 | enabled     | INTEGER | NOT NULL DEFAULT 1 | `1` = active, `0` = paused                               |
 | description | TEXT    |                    | Human-readable label e.g. `Every day at 2:00 AM`         |
@@ -292,6 +320,7 @@ Stores the user-configured sync schedule per service. The Backend Service polls 
 |----|----------|-----------------------|---------|----------------------|
 | 1  | vsphere  | `0 0 2 * * *`         | 1       | Every day at 2:00 AM |
 | 2  | newrelic | `0 0 6 * * MON-FRI`   | 1       | Weekdays at 6:00 AM  |
+| 3  | cmdb     | `0 0 3 * * *`         | 0       | Every day at 3:00 AM |
 
 ---
 
@@ -299,14 +328,14 @@ Stores the user-configured sync schedule per service. The Backend Service polls 
 
 | Decision | Rationale |
 |----------|-----------|
-| `hostname` as PK on `inventory`, `vsphere`, `newrelic` | Natural, human-readable unique key; avoids surrogate key joins |
+| `hostname` as PK on `vsphere`, `newrelic`, `cmdb` | Natural, human-readable unique key; avoids surrogate key joins |
+| `inventory` implemented as a SQL VIEW, not a table | Eliminates manual ETL step — the JOIN logic lives in the DB, not application code; inventory is always consistent with source tables |
 | No foreign keys between tables | Tables are populated independently by different sync sources; decoupled by design |
 | `credentials` uses `id` (INTEGER) as PK | Supports multiple credentials per service; no natural unique single column key |
 | `sync_schedule` uses `id` (INTEGER) as PK | Allows future expansion to multiple schedules per service |
 | Credentials stored as encrypted JSON | Flexible config structure per service type without needing extra columns |
-| `tags` stored as JSON string in `newrelic` | New Relic tags are dynamic key-value pairs; avoids a rigid schema |
 | All timestamps stored as TEXT in ISO 8601 UTC | SQLite has no native DATETIME type; ISO 8601 TEXT is portable and lexicographically sortable |
-| `reporting` and `enabled` stored as INTEGER | SQLite has no native BOOLEAN type; `1`/`0` is the standard SQLite convention |
+| `enabled` stored as INTEGER | SQLite has no native BOOLEAN type; `1`/`0` is the standard SQLite convention |
 
 ---
 

@@ -141,10 +141,9 @@ interface VsphereDisplayRow extends VsphereRecord {
             <span class="text-gray-500">Rows:</span>
             <select [(ngModel)]="pageSize" (ngModelChange)="onPageSizeChange()"
                     class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none">
-              <option [value]="20">20</option>
+              <option [value]="25">25</option>
               <option [value]="50">50</option>
               <option [value]="100">100</option>
-              <option [value]="200">200</option>
             </select>
             <span class="text-gray-400">&middot;</span>
             <span>{{ totalElements }} records</span>
@@ -170,7 +169,7 @@ export class VsphereListComponent implements OnInit {
   totalElements = 0;
   totalPages = 0;
   currentPage = 0;
-  pageSize = 20;
+  pageSize = 25;
   search = '';
   filterPowerState = '';
   showColumnPicker = false;
@@ -181,6 +180,7 @@ export class VsphereListComponent implements OnInit {
   // All available columns — initial order and visibility matches the requested defaults
   columns: ColumnDef[] = [
     { key: 'hostname',     label: 'Hostname',     visible: true  },
+    { key: 'sourceUrl',    label: 'vCenter URL',  visible: true  },
     { key: 'ipv4Address',  label: 'IPv4',         visible: true  },
     { key: 'cpuCount',     label: 'CPU Count',    visible: true  },
     { key: 'cpuCores',     label: 'CPU Cores',    visible: true  },

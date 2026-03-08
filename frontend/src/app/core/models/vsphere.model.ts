@@ -10,6 +10,7 @@ export interface VsphereRecord {
   toolsStatus?: string;
   ipv4Address?: string;
   ipv6Address?: string;
+  sourceUrl?: string;
   lastSyncedAt?: string;
   createdAt: string;
   updatedAt: string;

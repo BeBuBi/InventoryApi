@@ -1,0 +1,13 @@
+.gradle/
+build/
+bin/
+data/
+logs/
+frontend/
+*.db
+*.db-shm
+*.db-wal
+.git/
+.idea/
+.vscode/
+*.md

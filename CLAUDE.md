@@ -59,7 +59,7 @@ git -c http.sslVerify=false push origin main
 Monolith with two independently deployed services:
 - **Backend:** Spring Boot 3.2.5 / Java 17 (source compatibility) on port 8080
 - **Frontend:** Angular 18 on port 4200 (dev) / 80 (prod via nginx)
-- **Database:** Single SQLite 3.45 file with WAL mode (`inventory.db` in working directory)
+- **Database:** Single SQLite 3.45 file with WAL mode (`data/inventory.db`)
 
 ### Backend Layer Structure
 ```

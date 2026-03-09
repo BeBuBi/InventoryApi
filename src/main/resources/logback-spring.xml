@@ -17,10 +17,10 @@
         %ex  – exception stack trace (if any)
     -->
     <property name="CONSOLE_PATTERN"
-              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%15.15t] %-40.40logger{39} %M\(%F:%L\) - %msg%n%ex"/>
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%15.15t] %-40.40logger{39} \(%F:%L\) - %msg%n%ex"/>
 
     <property name="FILE_PATTERN"
-              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%t] %logger{39} %M(%F:%L) - %msg%n%ex"/>
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%t] %logger{39} (%F:%L) - %msg%n%ex"/>
 
     <!-- ── Console appender ───────────────────────────────────────── -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
@@ -33,13 +33,10 @@
     <!-- ── Rolling file appender ─────────────────────────────────── -->
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>logs/inventory-system.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
             <!-- Roll over daily; keep 30 days -->
             <fileNamePattern>logs/inventory-system.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
-            <timeBasedFileNamingAndTriggeringPolicy
-                    class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
-                <maxFileSize>20MB</maxFileSize>
-            </timeBasedFileNamingAndTriggeringPolicy>
+            <maxFileSize>20MB</maxFileSize>
             <maxHistory>30</maxHistory>
             <totalSizeCap>500MB</totalSizeCap>
         </rollingPolicy>

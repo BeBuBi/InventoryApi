@@ -114,7 +114,7 @@ The **Server Inventory System** is a backend application that consolidates serve
 | SCH-12 | Users shall be able to filter the CMDB list by OS Version (multi-select) | Medium | Implemented (`GET /api/cmdb/os-versions`) |
 | SCH-13 | Users shall be able to filter the CMDB list by Operational Status (multi-select) | Medium | Implemented (`GET /api/cmdb/op-statuses`) |
 | SCH-14 | Multi-select filter panels shall support Select All / Clear All and close on outside click | Medium | Implemented (shared `MultiSelectComponent`) |
-| SCH-15 | Backend filter params for dropdown filters shall accept multiple values (list) with `IN` guard | High | Implemented (all `List<String>` + JPQL `IN (:param) OR :param IS EMPTY`) |
+| SCH-15 | Backend filter params for dropdown filters shall accept multiple values (list) with `IN` guard | High | Implemented (all `List<String>` + JPQL `IS NULL` guard via `nullIfEmpty()` helper) |
 
 ### 4.6 REST API
 

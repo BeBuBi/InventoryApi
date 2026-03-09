@@ -25,7 +25,7 @@
 
 ## 1. Overview
 
-The data model consists of five physical tables and one read-only SQL VIEW, all stored in a single SQLite database file (`inventory.db`). All tables are independent — there are no foreign key constraints between them. The `hostname` field serves as the natural common key across `vsphere`, `newrelic`, and `cmdb`; the `inventory` VIEW aggregates all three by hostname automatically.
+The data model consists of five physical tables and one read-only SQL VIEW, all stored in a single SQLite database file (`data/inventory.db`). All tables are independent — there are no foreign key constraints between them. The `hostname` field serves as the natural common key across `vsphere`, `newrelic`, and `cmdb`; the `inventory` VIEW aggregates all three by hostname automatically.
 
 | Table / View | Purpose |
 |--------------|---------|

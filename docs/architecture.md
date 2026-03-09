@@ -1,7 +1,7 @@
 # Architecture Overview
 ## Server Inventory System
 
-**Version:** 1.3
+**Version:** 1.4
 **Author:** Solo Developer
 **Last Updated:** 2026-03-09
 **Status:** Draft
@@ -76,7 +76,7 @@ The backend service handles all responsibilities in one place — inventory mana
                                          │
                                          ▼
                         ┌────────────────────────┐
-                        │      inventory.db       │
+                        │   data/inventory.db     │
                         │      (SQLite)           │
                         │  ─────────────────────  │
                         │  inventory              │
@@ -233,7 +233,7 @@ Schedule: Fixed polling interval (every 1 minute) to check sync_schedule table
 
 **Package Structure:**
 ```
-com.example.inventorysystem
+com.cox.inventorysystem
 ├── controller
 │   ├── InventoryController.java
 │   ├── DashboardController.java
@@ -310,7 +310,7 @@ com.example.inventorysystem
 All list screens (Dashboard, vSphere, New Relic, CMDB) use inline column header filters instead of a top filter bar:
 - **Hostname column:** debounced text input (`Subject<string>` + 300 ms debounce + `distinctUntilChanged`)
 - **Multi-value columns:** reusable `MultiSelectComponent` (checkbox panel, Select All / Clear All, outside-click close)
-- Filter params are sent as repeated query string values (`explode: true`); the backend accepts `List<String>` and uses JPQL `IN (:param) OR :param IS EMPTY`
+- Filter params are sent as repeated query string values (`explode: true`); the backend accepts `List<String>` and uses a JPQL `IS NULL` guard (`nullIfEmpty()` helper) so an empty list returns all rows
 
 | Screen | Column Header Filters |
 |--------|-----------------------|
@@ -360,7 +360,7 @@ export const environment = {
 2. If current time matches the configured cron for 'vsphere' and enabled = 1
 3. VsphereApiClient connects to each enabled vCenter
 4. All VM records are fetched per vCenter
-5. Records are upserted into vsphere table in inventory.db
+5. Records are upserted into vsphere table in data/inventory.db
 6. last_synced_at is updated
 7. Sync result is logged
 ```
@@ -372,7 +372,7 @@ export const environment = {
 3. CmdbApiClient obtains OAuth2 Bearer token from ServiceNow token_url
 4. CmdbApiClient calls api_url with Bearer token to retrieve asset list
 5. Each record is mapped from ServiceNow field names to internal model
-6. Records are upserted into cmdb table in inventory.db
+6. Records are upserted into cmdb table in data/inventory.db
 7. last_synced_at is updated
 8. Sync result is logged
 ```
@@ -393,7 +393,7 @@ export const environment = {
 2. Admin selects service (vsphere, newrelic, or cmdb), day(s), and time
 3. Angular calls PUT /api/schedule/{service} to Backend Service
 4. Backend Service converts selection to cron expression
-5. Cron expression saved to sync_schedule table in inventory.db
+5. Cron expression saved to sync_schedule table in data/inventory.db
 6. Sync job picks up new schedule on its next 1-minute poll
 ```
 
@@ -401,7 +401,7 @@ export const environment = {
 
 ## 6. Database Design
 
-All data is stored in a **single SQLite database file** (`inventory.db`) owned by the Backend Service and mounted via a PersistentVolumeClaim in Kubernetes.
+All data is stored in a **single SQLite database file** (`data/inventory.db`) owned by the Backend Service and mounted via a PersistentVolumeClaim in Kubernetes.
 
 | Table | Access Type |
 |-------|-------------|
@@ -631,7 +631,7 @@ env:
 4. Admin sets enabled = true or false
 5. Angular calls POST /api/credentials to Backend Service
 6. Backend Service encrypts the config JSON using AES-256 + ENCRYPTION_KEY
-7. Encrypted credential is saved to credentials table in inventory.db
+7. Encrypted credential is saved to credentials table in data/inventory.db
 8. At next sync, Backend Service queries WHERE service = 'vsphere' AND enabled = 1
 9. Each enabled credential is decrypted and used to sync from that account
 10. Disabled credentials are silently skipped
@@ -639,26 +639,11 @@ env:
 
 ### 8.4 Docker Images
 
-Two Docker images are needed — one for the backend, one for the frontend:
+Two Docker images are built — one for the backend, one for the frontend.
 
-```dockerfile
-# Backend Service
-FROM eclipse-temurin:21-jre-alpine
-WORKDIR /app
-COPY target/inventory-system.jar app.jar
-ENTRYPOINT ["java", "-jar", "app.jar"]
-```
+**Backend (`Dockerfile`):** Multi-stage build using `eclipse-temurin:17` builder and `eclipse-temurin:17-jre-alpine` runtime. The SQLite CLI (`sqlite3`) is installed via `apk add --no-cache sqlite` for in-container DB inspection. The `data/` directory is created at image build time and the JAR is the entrypoint.
 
-```dockerfile
-# Frontend
-FROM node:20-alpine AS build
-WORKDIR /app
-COPY . .
-RUN npm install && npm run build -- --output-path=dist
-
-FROM nginx:alpine
-COPY --from=build /app/dist/inventory-app/browser /usr/share/nginx/html
-```
+**Frontend (`frontend/Dockerfile`):** Multi-stage build — `node:20-alpine` compiles the Angular app, then `nginx:alpine` serves the compiled SPA. The `frontend/nginx.conf` provides SPA fallback (`try_files $uri /index.html`), `/api/` reverse-proxy to the backend, gzip compression, and security headers.
 
 ---
 
@@ -669,7 +654,7 @@ COPY --from=build /app/dist/inventory-app/browser /usr/share/nginx/html
 | Authentication | JWT (JJWT 0.12) — **planned, not yet enforced**; Spring Security currently uses `permitAll()` |
 | vSphere, New Relic & CMDB credentials | Stored encrypted (AES-256) in database, editable via UI |
 | Encryption key | AES key stored as Kubernetes Secret, injected as env variable |
-| Credential masking | GET /api/credentials returns masked password/key (never plaintext) |
+| Credential masking | `GET /api/credentials` list endpoint returns metadata only — `config` is never decrypted or sent over the wire; individual `GET /api/credentials/{id}` also returns only metadata |
 | HTTPS | TLS terminated at Backend Service (LoadBalancer) |
 | CORS | Configured in Backend Service to allow Angular frontend origin only |
 | No internal traffic | Single service — no inter-service communication needed |
@@ -686,6 +671,7 @@ COPY --from=build /app/dist/inventory-app/browser /usr/share/nginx/html
 | ORM | Hibernate + SQLite Dialect | 6.x |
 | Build Tool | Gradle | 8.x |
 | Java | Eclipse Temurin | 21 (LTS) |
+| Logging | Logback (rolling file, `logs/`, 30-day retention) | (Spring Boot default) |
 | Containerization | Docker | latest |
 | Orchestration | Kubernetes | 1.29+ |
 | CI/CD | GitHub Actions | - |

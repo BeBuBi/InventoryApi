@@ -1,7 +1,7 @@
 # Technology Stack
 ## Server Inventory System
 
-**Version:** 1.2
+**Version:** 1.3
 **Last Updated:** 2026-03-09
 
 ---
@@ -40,10 +40,10 @@ Both run as Docker containers on Kubernetes. All application data lives in a sin
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
-| Java | 21 (LTS) | Primary language |
-| Eclipse Temurin | 21 JRE Alpine | Docker base image |
+| Java | 17 (LTS) | Primary language |
+| Eclipse Temurin | 17 JRE Alpine | Docker base image |
 
-Java 21 LTS is chosen for long-term support and access to virtual threads (Project Loom), which improve concurrency for I/O-bound sync jobs.
+Java 17 LTS is chosen for long-term support and broad compatibility with Spring Boot 3.2.
 
 ---
 
@@ -72,7 +72,7 @@ Java 21 LTS is chosen for long-term support and access to virtual threads (Proje
 
 **Key configuration (`application.properties`):**
 ```properties
-spring.datasource.url=jdbc:sqlite:${DB_PATH:./inventory.db}?journal_mode=WAL&busy_timeout=5000
+spring.datasource.url=jdbc:sqlite:${DB_PATH:./data/inventory.db}?journal_mode=WAL&busy_timeout=5000
 spring.datasource.driver-class-name=org.sqlite.JDBC
 spring.jpa.database-platform=org.hibernate.community.dialect.SQLiteDialect
 spring.jpa.hibernate.ddl-auto=validate
@@ -152,6 +152,14 @@ plugins {
     id 'java'
 }
 ```
+
+---
+
+### 2.10 Logging
+
+| Technology | Purpose |
+|------------|---------|
+| Logback (`logback-spring.xml`) | Structured rolling file appender — writes to `${user.dir}/logs/`, daily rollover, 20 MB max file size, 30-day retention; log pattern includes file name and line number (`%F:%L`) |
 
 ---
 
@@ -270,7 +278,7 @@ export const environment = {
 | Encryption key storage | Kubernetes Secret | Injected as `ENCRYPTION_KEY` env variable |
 | HTTPS | TLS at Kubernetes LoadBalancer | Terminated at the service boundary |
 | CORS | Spring Security | Configured to allow Angular frontend origin only |
-| Password masking | Application layer | API never returns plaintext passwords or API keys |
+| Credential list security | Application layer | `GET /api/credentials` (list) returns metadata only — `config` is never decrypted on list; no secrets travel over the wire |
 
 ---
 
@@ -282,8 +290,9 @@ export const environment = {
 |------------|---------|---------|
 | Docker | latest | Build and run container images |
 
-**Backend base image:** `eclipse-temurin:21-jre-alpine` — minimal JRE, small image size.
-**Frontend base image:** `nginx:alpine` — serves the compiled Angular SPA.
+**Backend (`Dockerfile`):** Multi-stage build — `eclipse-temurin:17` builder compiles the JAR; `eclipse-temurin:17-jre-alpine` is the runtime layer. The SQLite CLI (`sqlite3`) is installed via `apk add --no-cache sqlite` for in-container database inspection. The `data/` directory is created at image build time.
+
+**Frontend (`frontend/Dockerfile`):** Multi-stage build — `node:20-alpine` builds the Angular app; `nginx:alpine` serves it. The `frontend/nginx.conf` handles SPA fallback (`try_files $uri /index.html`), `/api/` reverse-proxy to the backend, gzip compression, and HTTP security headers.
 
 ---
 
@@ -344,7 +353,7 @@ export const environment = {
 
 | Layer | Technology | Version |
 |-------|------------|---------|
-| Language | Java | 21 LTS |
+| Language | Java | 17 LTS |
 | Framework | Spring Boot | 3.2.x |
 | REST | Spring Web MVC | (included) |
 | Data access | Spring Data JPA + Hibernate | 6.x |
@@ -366,7 +375,8 @@ export const environment = {
 | Containers | Docker | latest |
 | Orchestration | Kubernetes | 1.29+ |
 | CI/CD | GitHub Actions | — |
-| Base image (backend) | eclipse-temurin | 21-jre-alpine |
+| Logging | Logback (rolling file) | (Spring Boot default) |
+| Base image (backend) | eclipse-temurin | 17-jre-alpine |
 | Base image (frontend) | nginx | alpine |
 
 ---
@@ -395,7 +405,8 @@ Filter params that accept multiple values are sent as repeated query string valu
 
 ```java
 // Repository — guard so that an empty list returns all rows
-@Query("SELECT v FROM Vsphere v WHERE (:powerStates IS EMPTY OR v.powerState IN :powerStates)")
+// Use nullIfEmpty() in the service layer; the JPQL guard uses IS NULL instead of IS EMPTY
+@Query("SELECT v FROM Vsphere v WHERE (:powerStates IS NULL OR v.powerState IN :powerStates)")
 Page<Vsphere> findByFilters(@Param("powerStates") List<String> powerStates, Pageable pageable);
 ```
 

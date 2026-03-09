@@ -27,7 +27,7 @@
 
 ## 1. Overview
 
-All application data is stored in a single SQLite database file (`inventory.db`). The schema is managed by **Flyway** — all changes must be made through versioned migration files, never by editing the database directly.
+All application data is stored in a single SQLite database file (`data/inventory.db`). The schema is managed by **Flyway** — all changes must be made through versioned migration files, never by editing the database directly.
 
 The database contains five physical tables (`vsphere`, `newrelic`, `cmdb`, `credentials`, `sync_schedule`) and one read-only SQL VIEW (`inventory`). There are no foreign key constraints between tables by design — each table is populated independently by different sync sources. The `hostname` column is the natural join key across `vsphere`, `newrelic`, and `cmdb`; the `inventory` VIEW aggregates all three by hostname.
 
@@ -60,7 +60,7 @@ The following settings must be applied at the JDBC connection level (not in migr
 
 **Spring Boot datasource configuration (`application.properties`):**
 ```properties
-spring.datasource.url=jdbc:sqlite:${DB_PATH:./inventory.db}?journal_mode=WAL&busy_timeout=5000
+spring.datasource.url=jdbc:sqlite:${DB_PATH:./data/inventory.db}?journal_mode=WAL&busy_timeout=5000
 spring.datasource.driver-class-name=org.sqlite.JDBC
 spring.flyway.locations=classpath:db/migration
 ```

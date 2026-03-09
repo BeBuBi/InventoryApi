@@ -98,12 +98,16 @@ Flyway 10 manages schema via `src/main/resources/db/migration/V1__init_schema.sq
 
 | Purpose | Path |
 |---|---|
-| Spring Boot entry | `src/main/java/com/example/inventorysystem/InventorySystemApplication.java` |
-| CORS + Security config | `src/main/java/com/example/inventorysystem/config/WebConfig.java` |
-| Encryption service | `src/main/java/com/example/inventorysystem/service/EncryptionService.java` |
-| Sync status tracking | `src/main/java/com/example/inventorysystem/service/SyncStatusService.java` |
+| Spring Boot entry | `src/main/java/com/cox/inventorysystem/InventorySystemApplication.java` |
+| CORS + Security config | `src/main/java/com/cox/inventorysystem/config/WebConfig.java` |
+| Encryption service | `src/main/java/com/cox/inventorysystem/service/EncryptionService.java` |
+| Sync status tracking | `src/main/java/com/cox/inventorysystem/service/SyncStatusService.java` |
 | DB migration | `src/main/resources/db/migration/V1__init_schema.sql` |
 | App config | `src/main/resources/application.properties` |
+| Logging config | `src/main/resources/logback-spring.xml` |
+| Backend Dockerfile | `Dockerfile` |
+| Frontend Dockerfile | `frontend/Dockerfile` |
+| Frontend nginx config | `frontend/nginx.conf` |
 | API contract | `docs/openapi.yaml` (28 endpoints) |
 | Angular routes | `frontend/src/app/app.routes.ts` |
 | API base URL | `frontend/src/environments/environment.ts` |

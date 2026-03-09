@@ -91,7 +91,6 @@ import { Credential, CredentialRequest } from '../../../core/models/credential.m
           <thead class="bg-gray-50">
             <tr>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Details</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -100,17 +99,6 @@ import { Credential, CredentialRequest } from '../../../core/models/credential.m
           <tbody class="divide-y divide-gray-100">
             <tr *ngFor="let cred of credentials" class="hover:bg-gray-50">
               <td class="px-4 py-3 font-medium text-gray-900">{{ cred.name }}</td>
-              <td class="px-4 py-3 text-xs text-gray-600">
-                <span *ngIf="activeService === 'newrelic'">
-                  <span class="text-gray-400">Account ID:</span> {{ cred.config?.['accountId'] || '—' }}
-                </span>
-                <span *ngIf="activeService === 'vsphere'">
-                  <span class="text-gray-400">Host:</span> {{ cred.config?.['host'] || '—' }}
-                </span>
-                <span *ngIf="activeService === 'cmdb'">
-                  <span class="text-gray-400">Username:</span> {{ cred.config?.['username'] || '—' }}
-                </span>
-              </td>
               <td class="px-4 py-3">
                 <span [class]="cred.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'"
                       class="px-2 py-0.5 rounded text-xs font-medium">
@@ -128,7 +116,7 @@ import { Credential, CredentialRequest } from '../../../core/models/credential.m
               </td>
             </tr>
             <tr *ngIf="credentials.length === 0">
-              <td colspan="5" class="px-4 py-8 text-center text-gray-400">No credentials configured</td>
+              <td colspan="4" class="px-4 py-8 text-center text-gray-400">No credentials configured</td>
             </tr>
           </tbody>
         </table>

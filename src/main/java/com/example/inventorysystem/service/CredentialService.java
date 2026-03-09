@@ -22,7 +22,7 @@ public class CredentialService {
     public List<CredentialResponse> listByService(String service) {
         return credentialRepository.findByService(service)
                 .stream()
-                .map(c -> new CredentialResponse(c, encryptionService.decrypt(c.getConfig())))
+                .map(CredentialResponse::new)
                 .toList();
     }
 

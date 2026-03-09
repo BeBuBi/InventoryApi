@@ -8,6 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import org.springframework.web.client.RestClientResponseException;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -60,16 +62,30 @@ public class NewRelicApiClient {
         String requestBody = objectMapper.writeValueAsString(
                 objectMapper.createObjectNode().put("query", query));
 
-        String responseJson = RestClient.create(NERDGRAPH_URL)
-                .post()
-                .header("Api-Key", apiKey)
-                .header("Content-Type", "application/json")
-                .body(requestBody)
-                .retrieve()
-                .body(String.class);
+        String responseJson;
+        try {
+            responseJson = RestClient.create(NERDGRAPH_URL)
+                    .post()
+                    .header("Api-Key", apiKey)
+                    .header("Content-Type", "application/json")
+                    .body(requestBody)
+                    .retrieve()
+                    .body(String.class);
+        } catch (RestClientResponseException ex) {
+            log.error("New Relic API call failed — HTTP {} {}: {}",
+                    ex.getStatusCode().value(), ex.getStatusText(),
+                    ex.getResponseBodyAsString());
+            throw ex;
+        }
 
-        JsonNode account = objectMapper.readTree(responseJson)
-                .path("data").path("actor").path("account");
+        // NerdGraph always returns HTTP 200; auth/query errors appear in the errors array
+        JsonNode root = objectMapper.readTree(responseJson);
+        if (root.has("errors")) {
+            log.error("New Relic NerdGraph errors for account {}: {}", accountId, root.get("errors"));
+            throw new IllegalStateException("NerdGraph returned errors: " + root.get("errors"));
+        }
+
+        JsonNode account = root.path("data").path("actor").path("account");
 
         JsonNode networkRows = account.path("network").path("results");
         JsonNode systemRows  = account.path("system").path("results");

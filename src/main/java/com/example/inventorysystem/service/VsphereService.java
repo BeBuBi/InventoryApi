@@ -29,9 +29,9 @@ public class VsphereService {
         var pageable = PageRequest.of(page, size, Sort.by("hostname").ascending());
         var results = vsphereRepository.findAllFiltered(
                 nullIfBlank(search),
-                emptyIfNull(powerStates),
-                emptyIfNull(sourceUrls),
-                emptyIfNull(guestOsTypes),
+                nullIfEmpty(powerStates),
+                nullIfEmpty(sourceUrls),
+                nullIfEmpty(guestOsTypes),
                 pageable);
         return new PagedResponse<>(results.map(VsphereResponse::new));
     }
@@ -59,7 +59,7 @@ public class VsphereService {
         return (s == null || s.isBlank()) ? null : s;
     }
 
-    private List<String> emptyIfNull(List<String> list) {
-        return list == null ? List.of() : list;
+    private List<String> nullIfEmpty(List<String> list) {
+        return (list == null || list.isEmpty()) ? null : list;
     }
 }

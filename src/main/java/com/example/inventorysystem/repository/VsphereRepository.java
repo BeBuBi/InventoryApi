@@ -15,9 +15,9 @@ public interface VsphereRepository extends JpaRepository<Vsphere, String> {
     @Query("""
             SELECT v FROM Vsphere v
             WHERE (:search IS NULL OR LOWER(v.hostname) LIKE LOWER(CONCAT('%', :search, '%')))
-              AND ((:powerStates) IS EMPTY OR v.powerState IN (:powerStates))
-              AND ((:sourceUrls) IS EMPTY OR v.sourceUrl IN (:sourceUrls))
-              AND ((:guestOsTypes) IS EMPTY OR v.guestOs IN (:guestOsTypes))
+              AND (:powerStates IS NULL OR v.powerState IN (:powerStates))
+              AND (:sourceUrls IS NULL OR v.sourceUrl IN (:sourceUrls))
+              AND (:guestOsTypes IS NULL OR v.guestOs IN (:guestOsTypes))
             """)
     Page<Vsphere> findAllFiltered(
             @Param("search") String search,

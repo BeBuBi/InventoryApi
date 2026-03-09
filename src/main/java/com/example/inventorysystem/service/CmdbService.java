@@ -26,8 +26,8 @@ public class CmdbService {
         var pageable = PageRequest.of(page, size, Sort.by("hostname").ascending());
         var results = cmdbRepository.findAllFiltered(
                 nullIfBlank(search),
-                emptyIfNull(opStatuses),
-                emptyIfNull(osVersions),
+                nullIfEmpty(opStatuses),
+                nullIfEmpty(osVersions),
                 pageable);
         return new PagedResponse<>(results.map(CmdbResponse::new));
     }
@@ -50,7 +50,7 @@ public class CmdbService {
         return (s == null || s.isBlank()) ? null : s;
     }
 
-    private List<String> emptyIfNull(List<String> list) {
-        return list == null ? List.of() : list;
+    private List<String> nullIfEmpty(List<String> list) {
+        return (list == null || list.isEmpty()) ? null : list;
     }
 }

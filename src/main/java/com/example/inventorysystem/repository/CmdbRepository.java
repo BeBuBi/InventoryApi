@@ -15,8 +15,8 @@ public interface CmdbRepository extends JpaRepository<Cmdb, String> {
     @Query("""
             SELECT c FROM Cmdb c
             WHERE (:search IS NULL OR LOWER(c.hostname) LIKE LOWER(CONCAT('%', :search, '%')))
-              AND ((:opStatuses) IS EMPTY OR c.operationalStatus IN (:opStatuses))
-              AND ((:osVersions) IS EMPTY OR c.osVersion IN (:osVersions))
+              AND (:opStatuses IS NULL OR c.operationalStatus IN (:opStatuses))
+              AND (:osVersions IS NULL OR c.osVersion IN (:osVersions))
             """)
     Page<Cmdb> findAllFiltered(
             @Param("search") String search,

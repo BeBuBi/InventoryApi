@@ -30,8 +30,8 @@ public class NewRelicService {
                 nullIfBlank(search),
                 nullIfBlank(service),
                 nullIfBlank(environment),
-                emptyIfNull(accountIds),
-                emptyIfNull(linuxDistros),
+                nullIfEmpty(accountIds),
+                nullIfEmpty(linuxDistros),
                 pageable);
         return new PagedResponse<>(results.map(NewRelicResponse::new));
     }
@@ -58,7 +58,7 @@ public class NewRelicService {
         return (s == null || s.isBlank()) ? null : s;
     }
 
-    private List<String> emptyIfNull(List<String> list) {
-        return list == null ? List.of() : list;
+    private List<String> nullIfEmpty(List<String> list) {
+        return (list == null || list.isEmpty()) ? null : list;
     }
 }

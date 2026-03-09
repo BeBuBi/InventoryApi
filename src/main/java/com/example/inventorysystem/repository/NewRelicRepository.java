@@ -17,8 +17,8 @@ public interface NewRelicRepository extends JpaRepository<NewRelic, String> {
             WHERE (:search IS NULL OR LOWER(n.hostname) LIKE LOWER(CONCAT('%', :search, '%')))
               AND (:service IS NULL OR n.service = :service)
               AND (:environment IS NULL OR n.environment = :environment)
-              AND ((:accountIds) IS EMPTY OR n.accountId IN (:accountIds))
-              AND ((:linuxDistros) IS EMPTY OR n.linuxDistribution IN (:linuxDistros))
+              AND (:accountIds IS NULL OR n.accountId IN (:accountIds))
+              AND (:linuxDistros IS NULL OR n.linuxDistribution IN (:linuxDistros))
             """)
     Page<NewRelic> findAllFiltered(
             @Param("search") String search,

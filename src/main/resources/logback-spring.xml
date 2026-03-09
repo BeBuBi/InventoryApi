@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- Read log levels from application.properties / env -->
+    <springProperty scope="context" name="APP_LOG_LEVEL"  source="logging.level.com.example.inventorysystem" defaultValue="DEBUG"/>
+    <springProperty scope="context" name="ROOT_LOG_LEVEL" source="logging.level.root"                        defaultValue="INFO"/>
+
+    <!--
+        %d   – timestamp
+        %5p  – level (right-padded to 5 chars)
+        %t   – thread name
+        %logger{40} – logger (class) name, abbreviated to 40 chars
+        %M   – method name  (requires stack inspection; acceptable for DEBUG builds)
+        \(%F:%L\) – source file name + line number
+        %msg – log message
+        %n   – newline
+        %ex  – exception stack trace (if any)
+    -->
+    <property name="CONSOLE_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%15.15t] %-40.40logger{39} %M\(%F:%L\) - %msg%n%ex"/>
+
+    <property name="FILE_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%t] %logger{39} %M(%F:%L) - %msg%n%ex"/>
+
+    <!-- ── Console appender ───────────────────────────────────────── -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${CONSOLE_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- ── Rolling file appender ─────────────────────────────────── -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/inventory-system.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <!-- Roll over daily; keep 30 days -->
+            <fileNamePattern>logs/inventory-system.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <timeBasedFileNamingAndTriggeringPolicy
+                    class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+                <maxFileSize>20MB</maxFileSize>
+            </timeBasedFileNamingAndTriggeringPolicy>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>500MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${FILE_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- ── Application logger (DEBUG) ───────────────────────────── -->
+    <logger name="com.example.inventorysystem" level="${APP_LOG_LEVEL}" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </logger>
+
+    <!-- ── Suppress noisy framework loggers ─────────────────────── -->
+    <logger name="org.hibernate.SQL"                         level="WARN"/>
+    <logger name="org.hibernate.orm.jdbc.bind"               level="WARN"/>
+    <logger name="org.springframework.web"                   level="INFO"/>
+    <logger name="org.springframework.security"              level="WARN"/>
+    <logger name="org.springframework.data"                  level="WARN"/>
+    <logger name="com.zaxxer.hikari"                         level="WARN"/>
+    <logger name="org.flywaydb"                              level="INFO"/>
+
+    <!-- ── Root logger ───────────────────────────────────────────── -->
+    <root level="${ROOT_LOG_LEVEL}">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+
+</configuration>

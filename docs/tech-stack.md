@@ -1,8 +1,8 @@
 # Technology Stack
 ## Server Inventory System
 
-**Version:** 1.1
-**Last Updated:** 2026-03-07
+**Version:** 1.2
+**Last Updated:** 2026-03-09
 
 ---
 
@@ -179,7 +179,17 @@ TailwindCSS integrates with Angular via PostCSS and works alongside Angular's co
 
 ---
 
-### 3.3 HTTP Client
+### 3.3 Shared UI Components
+
+| Component | Path | Purpose |
+|-----------|------|---------|
+| `MultiSelectComponent` | `frontend/src/app/shared/components/multi-select/multi-select.component.ts` | Reusable standalone dropdown with checkbox list, Select All / Clear All, outside-click close, and optional `labelFn` mapping |
+
+The `MultiSelectComponent` is used by vSphere (vCenter URL, Power State, Guest OS), New Relic (Account ID, Linux Distro), and CMDB (OS Version, Op Status) list screens to render inline column header multi-select filters. It emits a `selectionChange: string[]` event that the parent component maps to API query params (`style: form, explode: true`).
+
+---
+
+### 3.4 HTTP Client
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
@@ -197,7 +207,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
 
 ---
 
-### 3.4 Build & Serving
+### 3.5 Build & Serving
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
@@ -363,12 +373,71 @@ export const environment = {
 
 ## 9. Code Conventions
 
+### 9.1 Backend
 - Use constructor injection, never field injection (`@Autowired`)
 - Package structure: `controller` → `service` → `repository` → `model`
 - DTOs for request/response, never expose entities directly
 - Use `@RestController` for REST APIs
 - Global exception handling with `@ControllerAdvice`
 - Validation with `@Valid` and Jakarta Bean Validation annotations
+
+### 9.2 Frontend
+
+**Inline column header filter pattern**
+
+All list screens use inline column header filters instead of a top filter bar:
+- Hostname: debounced `<input>` bound to `Subject<string>` (see debounced search pattern below)
+- Multi-value columns: `MultiSelectComponent` emits `string[]`; parent maps to repeated query params
+
+**Multi-select filter API param convention**
+
+Filter params that accept multiple values are sent as repeated query string values (e.g. `?powerState=poweredOn&powerState=poweredOff`). The backend receives them as `List<String>` and uses the JPQL pattern:
+
+```java
+// Repository — guard so that an empty list returns all rows
+@Query("SELECT v FROM Vsphere v WHERE (:powerStates IS EMPTY OR v.powerState IN :powerStates)")
+Page<Vsphere> findByFilters(@Param("powerStates") List<String> powerStates, Pageable pageable);
+```
+
+---
+
+**Debounced search pattern (all list screens)**
+
+Search inputs use a `Subject<string>` (not `Subject<void>`) as the trigger, so that `distinctUntilChanged()` can compare successive search strings and correctly suppress duplicate values while still firing on every unique change — including deletions:
+
+```typescript
+private searchTrigger$ = new Subject<string>();
+
+ngOnInit(): void {
+  this.searchTrigger$.pipe(
+    debounceTime(300),
+    distinctUntilChanged(),   // compares string values; works correctly only when Subject carries the term
+    switchMap(term => this.service.list({ search: term, ... })),
+    takeUntilDestroyed(this.destroyRef)
+  ).subscribe(...);
+}
+
+onSearchChange(): void {
+  this.currentPage = 0;
+  this.searchTrigger$.next(this.search);  // pass the current string, not void
+}
+```
+
+Using `Subject<void>` was a previous bug: every emission carried `undefined`, so `distinctUntilChanged()` swallowed all keystrokes after the first, meaning deleting characters from the search box did not update the list.
+
+**Page-size `<select>` binding**
+
+Page-size `<option>` elements must use `[ngValue]` (not `[value]`) to bind numeric values, and `load()` / `onPageSizeChange()` must read `this.pageSize` (not a hardcoded literal):
+
+```html
+<select [(ngModel)]="pageSize" (ngModelChange)="onPageSizeChange()">
+  <option [ngValue]="25">25</option>
+  <option [ngValue]="50">50</option>
+  <option [ngValue]="100">100</option>
+</select>
+```
+
+Using `[value]` coerces numbers to strings, which breaks `[(ngModel)]` two-way binding and causes `pageSize` to remain at its initial value regardless of the user's selection.
 
 ---
 

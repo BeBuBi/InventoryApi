@@ -13,16 +13,28 @@ export class VsphereService {
 
   list(params: {
     search?: string;
-    powerState?: string;
+    powerStates?: string[];
+    sourceUrls?: string[];
+    guestOsTypes?: string[];
     page?: number;
     size?: number;
   }): Observable<PagedResponse<VsphereRecord>> {
     let p = new HttpParams();
     if (params.search) p = p.set('search', params.search);
-    if (params.powerState) p = p.set('powerState', params.powerState);
+    (params.powerStates ?? []).forEach(v => p = p.append('powerStates', v));
+    (params.sourceUrls ?? []).forEach(v => p = p.append('sourceUrls', v));
+    (params.guestOsTypes ?? []).forEach(v => p = p.append('guestOsTypes', v));
     p = p.set('page', params.page ?? 0);
     p = p.set('size', params.size ?? 20);
     return this.http.get<PagedResponse<VsphereRecord>>(this.base, { params: p });
+  }
+
+  getSourceUrls(): Observable<string[]> {
+    return this.http.get<string[]>(`${this.base}/vcenter-urls`);
+  }
+
+  getGuestOsTypes(): Observable<string[]> {
+    return this.http.get<string[]>(`${this.base}/guest-os-types`);
   }
 
   getByHostname(hostname: string): Observable<VsphereRecord> {

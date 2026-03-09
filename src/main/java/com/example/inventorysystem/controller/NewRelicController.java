@@ -7,6 +7,7 @@ import com.example.inventorysystem.exception.SyncAlreadyRunningException;
 import com.example.inventorysystem.service.NewRelicService;
 import com.example.inventorysystem.service.SyncStatusService;
 import com.example.inventorysystem.sync.NewRelicSyncJob;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -26,20 +27,26 @@ public class NewRelicController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String service,
             @RequestParam(required = false) String environment,
-            @RequestParam(required = false) String accountId,
+            @RequestParam(required = false) List<String> accountIds,
+            @RequestParam(required = false) List<String> linuxDistros,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return newRelicService.list(search, service, environment, accountId, page, size);
+        return newRelicService.list(search, service, environment, accountIds, linuxDistros, page, size);
     }
 
     @GetMapping("/environments")
-    public java.util.List<String> listEnvironments() {
+    public List<String> listEnvironments() {
         return newRelicService.listEnvironments();
     }
 
     @GetMapping("/accounts")
-    public java.util.List<String> listAccountIds() {
+    public List<String> listAccountIds() {
         return newRelicService.listAccountIds();
+    }
+
+    @GetMapping("/linux-distros")
+    public List<String> listLinuxDistros() {
+        return newRelicService.listLinuxDistros();
     }
 
     @GetMapping("/{hostname}")

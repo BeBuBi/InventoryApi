@@ -17,11 +17,18 @@ public class CmdbService {
     private final CmdbRepository cmdbRepository;
 
     public PagedResponse<CmdbResponse> list(
-            String search, String operationalStatus, int page, int size) {
+            String search,
+            List<String> opStatuses,
+            List<String> osVersions,
+            int page,
+            int size) {
 
         var pageable = PageRequest.of(page, size, Sort.by("hostname").ascending());
         var results = cmdbRepository.findAllFiltered(
-                nullIfBlank(search), nullIfBlank(operationalStatus), pageable);
+                nullIfBlank(search),
+                emptyIfNull(opStatuses),
+                emptyIfNull(osVersions),
+                pageable);
         return new PagedResponse<>(results.map(CmdbResponse::new));
     }
 
@@ -35,7 +42,15 @@ public class CmdbService {
         return cmdbRepository.findDistinctOperationalStatuses();
     }
 
+    public List<String> listOsVersions() {
+        return cmdbRepository.findDistinctOsVersions();
+    }
+
     private String nullIfBlank(String s) {
         return (s == null || s.isBlank()) ? null : s;
+    }
+
+    private List<String> emptyIfNull(List<String> list) {
+        return list == null ? List.of() : list;
     }
 }

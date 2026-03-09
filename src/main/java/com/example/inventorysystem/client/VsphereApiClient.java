@@ -116,7 +116,14 @@ public class VsphereApiClient {
                     : vmName.toLowerCase();
 
             // vSphere 8.x: cpu/memory are top-level objects, not under "hardware"
-            String guestOs = detail.path("guest_OS").asText(null);
+            // The guest OS key varies by vSphere version: "guest_OS" (8.x REST) or "guestFullName" (older REST).
+            // Try both so the field is populated regardless of the vCenter version in use.
+            String guestOs = detail.has("guest_OS") ? detail.path("guest_OS").asText(null)
+                    : detail.path("guestFullName").asText(null);
+            if (guestOs == null) {
+                log.debug("guest_OS field not found in VM detail response for VM {}. "
+                        + "Available top-level keys: {}", vmId, detail.fieldNames());
+            }
             JsonNode cpu = detail.path("cpu");
             JsonNode memory = detail.path("memory");
             Integer cpuCount = cpu.path("count").isInt() ? cpu.path("count").asInt() : null;

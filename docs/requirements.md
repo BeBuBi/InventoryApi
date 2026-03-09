@@ -1,9 +1,9 @@
 # Requirements Document
 ## Server Inventory System
 
-**Version:** 1.1
+**Version:** 1.2
 **Author:** Solo Developer
-**Last Updated:** 2026-03-07
+**Last Updated:** 2026-03-09
 **Status:** Draft
 
 ---
@@ -98,13 +98,23 @@ The **Server Inventory System** is a backend application that consolidates serve
 
 ### 4.5 Search & Filtering
 
-| ID | Requirement | Priority |
-|----|-------------|----------|
-| SCH-01 | Users shall be able to search inventory by hostname | High |
-| SCH-02 | Users shall be able to filter by environment (production, staging, dev, dr) | High |
-| SCH-03 | Users shall be able to filter by status (active, maintenance, decommissioned, unknown) | High |
-| SCH-04 | Users shall be able to filter by alert status from New Relic | Medium |
-| SCH-07 | Search and filter results shall be paginated | High |
+| ID | Requirement | Priority | Status |
+|----|-------------|----------|--------|
+| SCH-01 | Users shall be able to search inventory by hostname | High | Implemented (debounced inline column header filter on all list screens) |
+| SCH-02 | Users shall be able to filter by environment (production, staging, dev, dr) | High | — |
+| SCH-03 | Users shall be able to filter by status (active, maintenance, decommissioned, unknown) | High | — |
+| SCH-04 | Users shall be able to filter by alert status from New Relic | Medium | — |
+| SCH-05 | Users shall be able to filter the vSphere list by source vCenter URL (multi-select) | Medium | Implemented |
+| SCH-06 | The vSphere screen shall provide a multi-select of distinct vCenter URLs loaded from the database | Medium | Implemented (`GET /api/vsphere/vcenter-urls`) |
+| SCH-07 | Search and filter results shall be paginated | High | Implemented |
+| SCH-08 | Users shall be able to filter the vSphere list by Power State (multi-select) | Medium | Implemented |
+| SCH-09 | Users shall be able to filter the vSphere list by Guest OS (multi-select) | Medium | Implemented (`GET /api/vsphere/guest-os-types`) |
+| SCH-10 | Users shall be able to filter the New Relic list by Account ID (multi-select) | Medium | Implemented |
+| SCH-11 | Users shall be able to filter the New Relic list by Linux Distribution (multi-select) | Medium | Implemented (`GET /api/newrelic/linux-distros`) |
+| SCH-12 | Users shall be able to filter the CMDB list by OS Version (multi-select) | Medium | Implemented (`GET /api/cmdb/os-versions`) |
+| SCH-13 | Users shall be able to filter the CMDB list by Operational Status (multi-select) | Medium | Implemented (`GET /api/cmdb/op-statuses`) |
+| SCH-14 | Multi-select filter panels shall support Select All / Clear All and close on outside click | Medium | Implemented (shared `MultiSelectComponent`) |
+| SCH-15 | Backend filter params for dropdown filters shall accept multiple values (list) with `IN` guard | High | Implemented (all `List<String>` + JPQL `IN (:param) OR :param IS EMPTY`) |
 
 ### 4.6 REST API
 
@@ -120,15 +130,18 @@ The **Server Inventory System** is a backend application that consolidates serve
 
 ### 4.7 Dashboard & UI
 
-| ID | Requirement | Priority |
-|----|-------------|----------|
-| UI-01 | The system shall provide a web-based dashboard accessible via browser | High |
-| UI-02 | The dashboard shall display a summary of total assets by source (vSphere, New Relic, CMDB, and total) | High |
-| UI-03 | The dashboard shall display a summary of assets by alert status | High |
-| UI-04 | The dashboard shall display a searchable, filterable inventory table | High |
-| UI-05 | Clicking an asset shall show its full details including vSphere and New Relic data | High |
-| UI-06 | The dashboard shall display the last sync time for vSphere and New Relic | Medium |
-| UI-07 | The UI shall be responsive and usable on desktop browsers | Medium |
+| ID | Requirement | Priority | Status |
+|----|-------------|----------|--------|
+| UI-01 | The system shall provide a web-based dashboard accessible via browser | High | Implemented |
+| UI-02 | The dashboard shall display a summary of total assets by source (vSphere, New Relic, CMDB, and total) | High | Implemented |
+| UI-03 | The dashboard shall display a summary of assets by alert status | High | — |
+| UI-04 | The dashboard shall display an inventory table with an inline Hostname column header filter (debounced text) and record count in a slim toolbar above the table | High | Implemented |
+| UI-05 | Clicking an asset shall show its full details including vSphere, New Relic, and CMDB data | High | Implemented |
+| UI-06 | The dashboard shall display the last sync time for vSphere and New Relic | Medium | — |
+| UI-07 | The UI shall be responsive and usable on desktop browsers | Medium | Implemented |
+| UI-08 | The vSphere, New Relic, and CMDB list screens shall use inline column header filters instead of a top filter bar | High | Implemented |
+| UI-09 | The Power State column shall be visible by default on the vSphere screen (after Hostname) | Medium | Implemented |
+| UI-10 | The OS column on the CMDB screen shall be hidden by default | Medium | Implemented |
 
 ---
 

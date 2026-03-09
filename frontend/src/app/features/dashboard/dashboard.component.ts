@@ -43,21 +43,14 @@ interface ColumnDef {
         </div>
       </div>
 
-      <!-- Search + Column picker -->
-      <div class="bg-white rounded-lg shadow p-4 mb-4 flex flex-wrap gap-3 items-center">
-        <input
-          [(ngModel)]="search"
-          (ngModelChange)="onSearchChange()"
-          placeholder="Search hostname..."
-          class="border border-gray-300 rounded-md px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          aria-label="Search hostnames"
-        />
+      <!-- Toolbar: record count + column picker -->
+      <div class="bg-white rounded-lg shadow px-4 py-3 mb-4 flex items-center justify-between">
+        <span class="text-sm text-gray-500">{{ totalElements }} records</span>
 
         <!-- Column picker button -->
-        <div class="relative ml-auto">
+        <div class="relative">
           <button (click)="showColumnPicker = !showColumnPicker"
-                  class="flex items-center gap-1 px-3 py-2 border border-gray-300 rounded text-sm text-gray-600 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  aria-label="Toggle column picker">
+                  class="flex items-center gap-1 px-3 py-2 border border-gray-300 rounded text-sm text-gray-600 hover:bg-gray-50 focus:outline-none">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7" />
@@ -107,11 +100,21 @@ interface ColumnDef {
           <thead class="bg-gray-50">
             <tr>
               <!-- Hostname is always first and always visible -->
-              <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Hostname</th>
+              <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap align-top">
+                <div>Hostname</div>
+                <div>
+                  <input
+                    [(ngModel)]="search"
+                    (ngModelChange)="onSearchChange()"
+                    placeholder="Filter..."
+                    class="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none mt-1 font-normal normal-case tracking-normal"
+                  />
+                </div>
+              </th>
               <th *ngFor="let col of visibleColumns; trackBy: trackByColKey"
                   scope="col"
-                  class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                {{ col.label }}
+                  class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap align-top">
+                <div>{{ col.label }}</div>
               </th>
             </tr>
           </thead>
@@ -209,12 +212,12 @@ interface ColumnDef {
             <span class="text-gray-500">Rows:</span>
             <select [(ngModel)]="pageSize" (ngModelChange)="onPageSizeChange()"
                     class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none">
-              <option [value]="25">25</option>
-              <option [value]="50">50</option>
-              <option [value]="100">100</option>
+              <option [ngValue]="25">25</option>
+              <option [ngValue]="50">50</option>
+              <option [ngValue]="100">100</option>
             </select>
             <span class="text-gray-400">&middot;</span>
-            <span>{{ counts?.total ?? 0 }} total hosts</span>
+            <span>{{ totalElements }} total hosts</span>
           </div>
           <div class="flex gap-2">
             <button (click)="prevPage()" [disabled]="currentPage === 0"
@@ -232,10 +235,11 @@ export class DashboardComponent implements OnInit {
   private inventoryService = inject(InventoryService);
   private destroyRef: DestroyRef = inject(DestroyRef);
 
-  private searchTrigger$ = new Subject<void>();
+  private searchTrigger$ = new Subject<string>();
 
   items: Inventory[] = [];
   counts?: InventoryCounts;
+  totalElements = 0;
   totalPages = 0;
   currentPage = 0;
   pageSize = 25;
@@ -245,9 +249,9 @@ export class DashboardComponent implements OnInit {
 
   // All pickable columns (hostname is fixed — not in this array).
   columns: ColumnDef[] = [
-    { key: 'cmdbIpAddress',    label: 'IP (CMDB)',          visible: true  },
     { key: 'vsphereIpv4',      label: 'IP (vSphere)',        visible: true  },
     { key: 'nrIpv4',           label: 'IP (New Relic)',      visible: true  },
+    { key: 'cmdbIpAddress',    label: 'IP (CMDB)',          visible: true  },
     { key: 'sources',          label: 'Sources',             visible: true  },
     { key: 'powerState',       label: 'Power State',         visible: false },
     { key: 'operationalStatus',label: 'Op. Status',          visible: false },
@@ -275,10 +279,10 @@ export class DashboardComponent implements OnInit {
     this.searchTrigger$.pipe(
       debounceTime(300),
       distinctUntilChanged(),
-      switchMap(() => {
+      switchMap(term => {
         this.loading = true;
         return this.inventoryService.list({
-          search: this.search,
+          search: term,
           page: this.currentPage,
           size: this.pageSize
         });
@@ -287,6 +291,7 @@ export class DashboardComponent implements OnInit {
     ).subscribe({
       next: (res: PagedResponse<Inventory>) => {
         this.items = res.content;
+        this.totalElements = res.totalElements;
         this.totalPages = res.totalPages;
         this.loading = false;
       },
@@ -298,7 +303,7 @@ export class DashboardComponent implements OnInit {
 
   onSearchChange(): void {
     this.currentPage = 0;
-    this.searchTrigger$.next();
+    this.searchTrigger$.next(this.search);
   }
 
   load(): void {
@@ -306,10 +311,11 @@ export class DashboardComponent implements OnInit {
     this.inventoryService.list({
       search: this.search,
       page: this.currentPage,
-      size: 20
+      size: this.pageSize
     }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (res: PagedResponse<Inventory>) => {
         this.items = res.content;
+        this.totalElements = res.totalElements;
         this.totalPages = res.totalPages;
         this.loading = false;
       },

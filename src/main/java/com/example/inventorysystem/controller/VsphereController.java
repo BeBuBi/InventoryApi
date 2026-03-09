@@ -7,6 +7,7 @@ import com.example.inventorysystem.exception.SyncAlreadyRunningException;
 import com.example.inventorysystem.service.SyncStatusService;
 import com.example.inventorysystem.service.VsphereService;
 import com.example.inventorysystem.sync.VsphereSyncJob;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,10 +25,22 @@ public class VsphereController {
     @GetMapping
     public PagedResponse<VsphereResponse> list(
             @RequestParam(required = false) String search,
-            @RequestParam(required = false) String powerState,
+            @RequestParam(required = false) List<String> powerStates,
+            @RequestParam(required = false) List<String> sourceUrls,
+            @RequestParam(required = false) List<String> guestOsTypes,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return vsphereService.list(search, powerState, page, size);
+        return vsphereService.list(search, powerStates, sourceUrls, guestOsTypes, page, size);
+    }
+
+    @GetMapping("/vcenter-urls")
+    public List<String> listSourceUrls() {
+        return vsphereService.listSourceUrls();
+    }
+
+    @GetMapping("/guest-os-types")
+    public List<String> listGuestOsTypes() {
+        return vsphereService.listGuestOsTypes();
     }
 
     @GetMapping("/{hostname}")

@@ -18,10 +18,6 @@ export class CredentialService {
     return this.http.post<Credential>(this.base, req);
   }
 
-  update(id: number, req: CredentialRequest): Observable<Credential> {
-    return this.http.put<Credential>(`${this.base}/${id}`, req);
-  }
-
   enable(id: number): Observable<Credential> {
     return this.http.patch<Credential>(`${this.base}/${id}/enable`, null);
   }

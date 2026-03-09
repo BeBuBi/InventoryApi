@@ -15,14 +15,19 @@ public interface CmdbRepository extends JpaRepository<Cmdb, String> {
     @Query("""
             SELECT c FROM Cmdb c
             WHERE (:search IS NULL OR LOWER(c.hostname) LIKE LOWER(CONCAT('%', :search, '%')))
-              AND (:operationalStatus IS NULL OR c.operationalStatus = :operationalStatus)
+              AND ((:opStatuses) IS EMPTY OR c.operationalStatus IN (:opStatuses))
+              AND ((:osVersions) IS EMPTY OR c.osVersion IN (:osVersions))
             """)
     Page<Cmdb> findAllFiltered(
             @Param("search") String search,
-            @Param("operationalStatus") String operationalStatus,
+            @Param("opStatuses") List<String> opStatuses,
+            @Param("osVersions") List<String> osVersions,
             Pageable pageable
     );
 
     @Query("SELECT DISTINCT c.operationalStatus FROM Cmdb c WHERE c.operationalStatus IS NOT NULL ORDER BY c.operationalStatus")
     List<String> findDistinctOperationalStatuses();
+
+    @Query("SELECT DISTINCT c.osVersion FROM Cmdb c WHERE c.osVersion IS NOT NULL ORDER BY c.osVersion")
+    List<String> findDistinctOsVersions();
 }

@@ -13,10 +13,6 @@ export class ScheduleService {
     return this.http.get<SyncSchedule[]>(this.base);
   }
 
-  getByService(service: string): Observable<SyncSchedule> {
-    return this.http.get<SyncSchedule>(`${this.base}/${service}`);
-  }
-
   update(service: string, req: SyncScheduleRequest): Observable<SyncSchedule> {
     return this.http.put<SyncSchedule>(`${this.base}/${service}`, req);
   }

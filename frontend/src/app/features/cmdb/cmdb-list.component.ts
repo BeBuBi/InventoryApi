@@ -2,10 +2,11 @@ import { Component, OnInit, inject, DestroyRef } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Subject } from 'rxjs';
-import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
+import { Subject, of } from 'rxjs';
+import { debounceTime, distinctUntilChanged, switchMap, catchError } from 'rxjs/operators';
 import { CmdbService } from '../../core/services/cmdb.service';
 import { CmdbRecord } from '../../core/models/cmdb.model';
+import { MultiSelectComponent } from '../../shared/components/multi-select/multi-select.component';
 
 interface ColumnDef {
   key: keyof CmdbRecord;
@@ -25,27 +26,19 @@ interface CmdbDisplayRow extends CmdbRecord {
 @Component({
   selector: 'app-cmdb-list',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, MultiSelectComponent],
   template: `
     <div class="p-6">
       <div class="flex items-center justify-between mb-6">
         <h1 class="text-2xl font-bold text-gray-800">CMDB Assets</h1>
       </div>
 
-      <!-- Filters + Column Picker toggle -->
-      <div class="bg-white rounded-lg shadow p-4 mb-4 flex flex-wrap gap-3 items-center">
-        <input [(ngModel)]="search" (ngModelChange)="onSearchChange()" placeholder="Search hostname..."
-               class="border border-gray-300 rounded px-3 py-2 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        <select [(ngModel)]="operationalStatus" (ngModelChange)="onFilter()"
-                class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none">
-          <option value="">All Statuses</option>
-          <option *ngFor="let s of operationalStatuses; trackBy: trackByValue" [value]="s">{{ operationalStatusLabel(s) }}</option>
-        </select>
-
+      <!-- Toolbar: record count left, column picker right -->
+      <div class="bg-white rounded-lg shadow px-4 py-3 mb-4 flex items-center justify-between">
         <span class="text-sm text-gray-500">{{ totalElements }} records</span>
 
         <!-- Column picker button -->
-        <div class="relative ml-auto">
+        <div class="relative">
           <button (click)="showColumnPicker = !showColumnPicker"
                   class="flex items-center gap-1 px-3 py-2 border border-gray-300 rounded text-sm text-gray-600 hover:bg-gray-50 focus:outline-none">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -89,7 +82,6 @@ interface CmdbDisplayRow extends CmdbRecord {
             </div>
           </div>
         </div>
-
       </div>
 
       <!-- Table -->
@@ -98,8 +90,40 @@ interface CmdbDisplayRow extends CmdbRecord {
           <thead class="bg-gray-50">
             <tr>
               <th *ngFor="let col of visibleColumns; trackBy: trackByColKey"
-                  class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">
-                {{ col.label }}
+                  class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap align-top">
+                <div>{{ col.label }}</div>
+
+                <!-- Inline filter: Hostname text input -->
+                <div *ngIf="col.key === 'hostname'">
+                  <input
+                    [(ngModel)]="search"
+                    (ngModelChange)="onSearchChange()"
+                    placeholder="Filter..."
+                    class="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none mt-1 font-normal normal-case tracking-normal"
+                  />
+                </div>
+
+                <!-- Inline filter: OS Version multi-select -->
+                <div *ngIf="col.key === 'osVersion'">
+                  <app-multi-select
+                    [options]="osVersionOptions"
+                    [selected]="filterOsVersions"
+                    placeholder="All"
+                    (selectedChange)="filterOsVersions = $event; onFilter()">
+                  </app-multi-select>
+                </div>
+
+                <!-- Inline filter: Operational Status multi-select -->
+                <div *ngIf="col.key === 'operationalStatus'">
+                  <app-multi-select
+                    [options]="opStatusOptions"
+                    [selected]="filterOpStatuses"
+                    [labelFn]="operationalStatusLabel"
+                    placeholder="All"
+                    (selectedChange)="filterOpStatuses = $event; onFilter()">
+                  </app-multi-select>
+                </div>
+
               </th>
             </tr>
           </thead>
@@ -136,9 +160,9 @@ interface CmdbDisplayRow extends CmdbRecord {
             <span class="text-gray-500">Rows:</span>
             <select [(ngModel)]="pageSize" (ngModelChange)="onPageSizeChange()"
                     class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none">
-              <option [value]="25">25</option>
-              <option [value]="50">50</option>
-              <option [value]="100">100</option>
+              <option [ngValue]="25">25</option>
+              <option [ngValue]="50">50</option>
+              <option [ngValue]="100">100</option>
             </select>
             <span class="text-gray-400">&middot;</span>
             <span>{{ totalElements }} records</span>
@@ -161,23 +185,25 @@ export class CmdbListComponent implements OnInit {
 
   displayItems: CmdbDisplayRow[] = [];
   visibleColumns: ColumnDef[] = [];
-  operationalStatuses: string[] = [];
+  osVersionOptions: string[] = [];
+  opStatusOptions: string[] = [];
   totalElements = 0;
   totalPages = 0;
   currentPage = 0;
   pageSize = 25;
   search = '';
-  operationalStatus = '';
+  filterOsVersions: string[] = [];
+  filterOpStatuses: string[] = [];
   showColumnPicker = false;
 
   // Subject that drives debounced search-triggered loads.
-  private searchTrigger$ = new Subject<void>();
+  private searchTrigger$ = new Subject<string>();
 
   // All available columns — initial order and visibility matches the requested defaults
   columns: ColumnDef[] = [
     { key: 'hostname',          label: 'Hostname',          visible: true  },
     { key: 'ipAddress',         label: 'IP Address',        visible: true  },
-    { key: 'os',                label: 'OS',                visible: true  },
+    { key: 'os',                label: 'OS',                visible: false },
     { key: 'osVersion',         label: 'OS Version',        visible: true  },
     { key: 'location',          label: 'Location',          visible: false },
     { key: 'department',        label: 'Department',        visible: false },
@@ -193,10 +219,21 @@ export class CmdbListComponent implements OnInit {
     // Seed the cached visible-column list before first render.
     this.refreshVisibleColumns();
 
-    // Load the distinct operational statuses for the filter dropdown.
+    // Load distinct OS version options for the inline filter dropdown.
+    this.cmdbService.getOsVersions()
+      .pipe(
+        catchError(err => { console.error('Failed to load OS versions', err); return of([]); }),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe(versions => { this.osVersionOptions = versions; });
+
+    // Load distinct operational status options for the inline filter dropdown.
     this.cmdbService.listOperationalStatuses()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(statuses => { this.operationalStatuses = statuses; });
+      .pipe(
+        catchError(err => { console.error('Failed to load operational statuses', err); return of([]); }),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe(statuses => { this.opStatusOptions = statuses; });
 
     // Wire up the debounced search pipeline. switchMap cancels any in-flight request
     // before starting a new one. takeUntilDestroyed cleans up when the component is destroyed.
@@ -204,9 +241,10 @@ export class CmdbListComponent implements OnInit {
       .pipe(
         debounceTime(300),
         distinctUntilChanged(),
-        switchMap(() => this.cmdbService.list({
-          search: this.search,
-          operationalStatus: this.operationalStatus,
+        switchMap(term => this.cmdbService.list({
+          search: term,
+          opStatuses: this.filterOpStatuses,
+          osVersions: this.filterOsVersions,
           page: this.currentPage,
           size: this.pageSize
         })),
@@ -225,7 +263,8 @@ export class CmdbListComponent implements OnInit {
   loadImmediate(): void {
     this.cmdbService.list({
       search: this.search,
-      operationalStatus: this.operationalStatus,
+      opStatuses: this.filterOpStatuses,
+      osVersions: this.filterOsVersions,
       page: this.currentPage,
       size: this.pageSize
     })
@@ -240,7 +279,7 @@ export class CmdbListComponent implements OnInit {
   // Keystroke handler — feeds the debounced pipeline.
   onSearchChange(): void {
     this.currentPage = 0;
-    this.searchTrigger$.next();
+    this.searchTrigger$.next(this.search);
   }
 
   onFilter(): void { this.currentPage = 0; this.loadImmediate(); }
@@ -276,24 +315,9 @@ export class CmdbListComponent implements OnInit {
     return col.key;
   }
 
-  trackByValue(_index: number, value: string): string {
-    return value;
-  }
-
-  // Convert a raw API record into a display row by precomputing all derived values once.
-  toDisplayRow(asset: CmdbRecord): CmdbDisplayRow {
-    return {
-      ...asset,
-      _lastSyncedAtFormatted: asset.lastSyncedAt ? new Date(asset.lastSyncedAt).toLocaleString() : '—',
-      _createdAtFormatted:    asset.createdAt    ? new Date(asset.createdAt).toLocaleString()    : '—',
-      _updatedAtFormatted:    asset.updatedAt    ? new Date(asset.updatedAt).toLocaleString()    : '—',
-      _operationalStatusLabel: this.operationalStatusLabel(asset.operationalStatus),
-      _operationalStatusClass: this.operationalStatusClass(asset.operationalStatus),
-    };
-  }
-
-  operationalStatusLabel(status?: string): string {
-    if (!status) return '—';
+  // Bound method passed to app-multi-select [labelFn] for the op-status dropdown so
+  // the panel shows human-readable labels while the backing values stay numeric strings.
+  operationalStatusLabel = (status: string): string => {
     switch (status) {
       case '1': return 'Operational';
       case '2': return 'Repair in Progress';
@@ -302,7 +326,7 @@ export class CmdbListComponent implements OnInit {
       case '7': return 'Stolen';
       default:  return status;
     }
-  }
+  };
 
   operationalStatusClass(status?: string): string {
     switch (status) {
@@ -315,5 +339,16 @@ export class CmdbListComponent implements OnInit {
     }
   }
 
-}
+  // Convert a raw API record into a display row by precomputing all derived values once.
+  toDisplayRow(asset: CmdbRecord): CmdbDisplayRow {
+    return {
+      ...asset,
+      _lastSyncedAtFormatted: asset.lastSyncedAt ? new Date(asset.lastSyncedAt).toLocaleString() : '—',
+      _createdAtFormatted:    asset.createdAt    ? new Date(asset.createdAt).toLocaleString()    : '—',
+      _updatedAtFormatted:    asset.updatedAt    ? new Date(asset.updatedAt).toLocaleString()    : '—',
+      _operationalStatusLabel: this.operationalStatusLabel(asset.operationalStatus ?? ''),
+      _operationalStatusClass: this.operationalStatusClass(asset.operationalStatus),
+    };
+  }
 
+}

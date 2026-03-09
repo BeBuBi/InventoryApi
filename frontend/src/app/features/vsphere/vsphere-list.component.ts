@@ -2,10 +2,11 @@ import { Component, OnInit, inject, DestroyRef } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Subject } from 'rxjs';
-import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
+import { Subject, of } from 'rxjs';
+import { debounceTime, distinctUntilChanged, switchMap, catchError } from 'rxjs/operators';
 import { VsphereService } from '../../core/services/vsphere.service';
 import { VsphereRecord } from '../../core/models/vsphere.model';
+import { MultiSelectComponent } from '../../shared/components/multi-select/multi-select.component';
 
 interface ColumnDef {
   key: keyof VsphereRecord;
@@ -23,32 +24,25 @@ interface VsphereDisplayRow extends VsphereRecord {
   _powerStateClass: string;
 }
 
+// Static power-state options for the multi-select (not fetched from backend).
+const POWER_STATE_OPTIONS = ['poweredOn', 'poweredOff', 'suspended'];
+
 @Component({
   selector: 'app-vsphere-list',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, MultiSelectComponent],
   template: `
     <div class="p-6">
       <div class="flex items-center justify-between mb-6">
         <h1 class="text-2xl font-bold text-gray-800">vSphere VMs</h1>
       </div>
 
-      <!-- Filters + Column Picker toggle -->
-      <div class="bg-white rounded-lg shadow p-4 mb-4 flex flex-wrap gap-3 items-center">
-        <input [(ngModel)]="search" (ngModelChange)="onSearchChange()" placeholder="Search hostname..."
-               class="border border-gray-300 rounded px-3 py-2 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        <select [(ngModel)]="filterPowerState" (ngModelChange)="onFilter()"
-                class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none">
-          <option value="">All Power States</option>
-          <option value="poweredOn">Powered On</option>
-          <option value="poweredOff">Powered Off</option>
-          <option value="suspended">Suspended</option>
-        </select>
-
+      <!-- Toolbar: record count + column picker -->
+      <div class="bg-white rounded-lg shadow px-4 py-3 mb-4 flex items-center justify-between">
         <span class="text-sm text-gray-500">{{ totalElements }} records</span>
 
         <!-- Column picker button -->
-        <div class="relative ml-auto">
+        <div class="relative">
           <button (click)="showColumnPicker = !showColumnPicker"
                   class="flex items-center gap-1 px-3 py-2 border border-gray-300 rounded text-sm text-gray-600 hover:bg-gray-50 focus:outline-none">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -92,7 +86,6 @@ interface VsphereDisplayRow extends VsphereRecord {
             </div>
           </div>
         </div>
-
       </div>
 
       <!-- Table -->
@@ -101,8 +94,49 @@ interface VsphereDisplayRow extends VsphereRecord {
           <thead class="bg-gray-50">
             <tr>
               <th *ngFor="let col of visibleColumns; trackBy: trackByColKey"
-                  class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">
-                {{ col.label }}
+                  class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap align-top">
+                <div>{{ col.label }}</div>
+
+                <!-- Inline filter: Hostname text input -->
+                <div *ngIf="col.key === 'hostname'">
+                  <input
+                    [(ngModel)]="search"
+                    (ngModelChange)="onSearchChange()"
+                    placeholder="Filter..."
+                    class="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none mt-1 font-normal normal-case tracking-normal"
+                  />
+                </div>
+
+                <!-- Inline filter: vCenter URL multi-select -->
+                <div *ngIf="col.key === 'sourceUrl'">
+                  <app-multi-select
+                    [options]="sourceUrlOptions"
+                    [selected]="filterSourceUrls"
+                    placeholder="All"
+                    (selectedChange)="filterSourceUrls = $event; onFilter()">
+                  </app-multi-select>
+                </div>
+
+                <!-- Inline filter: Power State multi-select -->
+                <div *ngIf="col.key === 'powerState'">
+                  <app-multi-select
+                    [options]="powerStateOptions"
+                    [selected]="filterPowerStates"
+                    placeholder="All"
+                    (selectedChange)="filterPowerStates = $event; onFilter()">
+                  </app-multi-select>
+                </div>
+
+                <!-- Inline filter: Guest OS multi-select -->
+                <div *ngIf="col.key === 'guestOs'">
+                  <app-multi-select
+                    [options]="guestOsOptions"
+                    [selected]="filterGuestOsTypes"
+                    placeholder="All"
+                    (selectedChange)="filterGuestOsTypes = $event; onFilter()">
+                  </app-multi-select>
+                </div>
+
               </th>
             </tr>
           </thead>
@@ -141,9 +175,9 @@ interface VsphereDisplayRow extends VsphereRecord {
             <span class="text-gray-500">Rows:</span>
             <select [(ngModel)]="pageSize" (ngModelChange)="onPageSizeChange()"
                     class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none">
-              <option [value]="25">25</option>
-              <option [value]="50">50</option>
-              <option [value]="100">100</option>
+              <option [ngValue]="25">25</option>
+              <option [ngValue]="50">50</option>
+              <option [ngValue]="100">100</option>
             </select>
             <span class="text-gray-400">&middot;</span>
             <span>{{ totalElements }} records</span>
@@ -165,21 +199,27 @@ export class VsphereListComponent implements OnInit {
   private destroyRef = inject(DestroyRef);
 
   displayItems: VsphereDisplayRow[] = [];
+  sourceUrlOptions: string[] = [];
+  guestOsOptions: string[] = [];
+  readonly powerStateOptions = POWER_STATE_OPTIONS;
   visibleColumns: ColumnDef[] = [];
   totalElements = 0;
   totalPages = 0;
   currentPage = 0;
   pageSize = 25;
   search = '';
-  filterPowerState = '';
+  filterPowerStates: string[] = [];
+  filterSourceUrls: string[] = [];
+  filterGuestOsTypes: string[] = [];
   showColumnPicker = false;
 
   // Subject that drives debounced search-triggered loads.
-  private searchTrigger$ = new Subject<void>();
+  private searchTrigger$ = new Subject<string>();
 
   // All available columns — initial order and visibility matches the requested defaults
   columns: ColumnDef[] = [
     { key: 'hostname',     label: 'Hostname',     visible: true  },
+    { key: 'powerState',   label: 'Power State',  visible: true  },
     { key: 'sourceUrl',    label: 'vCenter URL',  visible: true  },
     { key: 'ipv4Address',  label: 'IPv4',         visible: true  },
     { key: 'cpuCount',     label: 'CPU Count',    visible: true  },
@@ -188,7 +228,6 @@ export class VsphereListComponent implements OnInit {
     { key: 'guestOs',      label: 'Guest OS',     visible: true  },
     { key: 'vmName',       label: 'VM Name',      visible: false },
     { key: 'memoryMb',     label: 'Memory (MB)',  visible: false },
-    { key: 'powerState',   label: 'Power State',  visible: false },
     { key: 'toolsStatus',  label: 'Tools Status', visible: false },
     { key: 'ipv6Address',  label: 'IPv6',         visible: false },
     { key: 'lastSyncedAt', label: 'Last Synced',  visible: false },
@@ -206,9 +245,11 @@ export class VsphereListComponent implements OnInit {
       .pipe(
         debounceTime(300),
         distinctUntilChanged(),
-        switchMap(() => this.vsphereService.list({
-          search: this.search,
-          powerState: this.filterPowerState,
+        switchMap(term => this.vsphereService.list({
+          search: term,
+          powerStates: this.filterPowerStates,
+          sourceUrls: this.filterSourceUrls,
+          guestOsTypes: this.filterGuestOsTypes,
           page: this.currentPage,
           size: this.pageSize
         })),
@@ -221,13 +262,37 @@ export class VsphereListComponent implements OnInit {
       });
 
     this.loadImmediate();
+
+    this.vsphereService.getSourceUrls()
+      .pipe(
+        catchError(err => { console.error('Failed to load vCenter URLs', err); return of([]); }),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe(urls => this.sourceUrlOptions = urls);
+
+    this.vsphereService.getGuestOsTypes()
+      .pipe(
+        catchError(err => { console.error('Failed to load guest OS types', err); return of([]); }),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe(types => {
+        if (types.length === 0) {
+          console.warn(
+            'Guest OS dropdown: /api/vsphere/guest-os-types returned an empty list. ' +
+            'This means the guest_os column is NULL for all rows — run a vSphere sync to populate it.'
+          );
+        }
+        this.guestOsOptions = types;
+      });
   }
 
   // Called for filter/page changes that should load immediately (no debounce needed).
   loadImmediate(): void {
     this.vsphereService.list({
       search: this.search,
-      powerState: this.filterPowerState,
+      powerStates: this.filterPowerStates,
+      sourceUrls: this.filterSourceUrls,
+      guestOsTypes: this.filterGuestOsTypes,
       page: this.currentPage,
       size: this.pageSize
     })
@@ -242,7 +307,7 @@ export class VsphereListComponent implements OnInit {
   // Keystroke handler — feeds the debounced pipeline.
   onSearchChange(): void {
     this.currentPage = 0;
-    this.searchTrigger$.next();
+    this.searchTrigger$.next(this.search);
   }
 
   onFilter(): void { this.currentPage = 0; this.loadImmediate(); }

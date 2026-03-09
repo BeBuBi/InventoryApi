@@ -1,6 +1,7 @@
 package com.example.inventorysystem.repository;
 
 import com.example.inventorysystem.model.NewRelic;
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -16,19 +17,24 @@ public interface NewRelicRepository extends JpaRepository<NewRelic, String> {
             WHERE (:search IS NULL OR LOWER(n.hostname) LIKE LOWER(CONCAT('%', :search, '%')))
               AND (:service IS NULL OR n.service = :service)
               AND (:environment IS NULL OR n.environment = :environment)
-              AND (:accountId IS NULL OR LOWER(n.accountId) LIKE LOWER(CONCAT('%', :accountId, '%')))
+              AND ((:accountIds) IS EMPTY OR n.accountId IN (:accountIds))
+              AND ((:linuxDistros) IS EMPTY OR n.linuxDistribution IN (:linuxDistros))
             """)
     Page<NewRelic> findAllFiltered(
             @Param("search") String search,
             @Param("service") String service,
             @Param("environment") String environment,
-            @Param("accountId") String accountId,
+            @Param("accountIds") List<String> accountIds,
+            @Param("linuxDistros") List<String> linuxDistros,
             Pageable pageable
     );
 
     @Query("SELECT DISTINCT n.environment FROM NewRelic n WHERE n.environment IS NOT NULL ORDER BY n.environment")
-    java.util.List<String> findDistinctEnvironments();
+    List<String> findDistinctEnvironments();
 
     @Query("SELECT DISTINCT n.accountId FROM NewRelic n WHERE n.accountId IS NOT NULL ORDER BY n.accountId")
-    java.util.List<String> findDistinctAccountIds();
+    List<String> findDistinctAccountIds();
+
+    @Query("SELECT DISTINCT n.linuxDistribution FROM NewRelic n WHERE n.linuxDistribution IS NOT NULL ORDER BY n.linuxDistribution")
+    List<String> findDistinctLinuxDistros();
 }

@@ -1,9 +1,9 @@
 # Architecture Overview
 ## Server Inventory System
 
-**Version:** 1.2
+**Version:** 1.3
 **Author:** Solo Developer
-**Last Updated:** 2026-03-07
+**Last Updated:** 2026-03-09
 **Status:** Draft
 
 ---
@@ -124,19 +124,23 @@ GET    /api/inventory/{hostname}         Get full flat asset detail (from invent
 
 GET    /api/dashboard/assets             Paginated search over inventory VIEW (search, page, size)
 
-GET    /api/vsphere                      List all vSphere records (paginated)
+GET    /api/vsphere                      List all vSphere records (paginated; filters: search, sourceUrl[], powerState[], guestOs[])
+GET    /api/vsphere/vcenter-urls         List distinct source_url values (multi-select filter population)
+GET    /api/vsphere/guest-os-types       List distinct guest_os values (multi-select filter population)
 GET    /api/vsphere/{hostname}           Get vSphere record by hostname
 POST   /api/vsphere/sync                 Trigger manual vSphere sync
 GET    /api/vsphere/sync/status          Get last vSphere sync status and timestamp
 
-GET    /api/newrelic                     List all New Relic records (paginated)
+GET    /api/newrelic                     List all New Relic records (paginated; filters: search, accountId[], linuxDistro[])
+GET    /api/newrelic/linux-distros       List distinct linux_distribution values (multi-select filter population)
 GET    /api/newrelic/{hostname}          Get New Relic record by hostname
 POST   /api/newrelic/sync                Trigger manual New Relic sync
 GET    /api/newrelic/sync/status         Get last New Relic sync status and timestamp
 
-GET    /api/cmdb                         List all CMDB records (paginated, filterable by operationalStatus)
+GET    /api/cmdb                         List all CMDB records (paginated; filters: search, osVersion[], operationalStatus[])
+GET    /api/cmdb/os-versions             List distinct os_version values (multi-select filter population)
+GET    /api/cmdb/op-statuses             List distinct operational_status values (multi-select filter population)
 GET    /api/cmdb/{hostname}              Get CMDB record by hostname
-GET    /api/cmdb/operational-statuses    List distinct operational status values
 POST   /api/cmdb/sync                    Trigger manual CMDB sync
 GET    /api/cmdb/sync/status             Get last CMDB sync status and timestamp
 
@@ -298,8 +302,25 @@ com.example.inventorysystem
 - Serve the dashboard UI to system administrators and stakeholders
 - Communicate with backend exclusively via REST API
 - Display searchable, filterable inventory table
-- Display asset detail view with vSphere and New Relic data
+- Display asset detail view with vSphere, New Relic, and CMDB data
 - Display summary metrics (total assets by source: vSphere, New Relic, CMDB, and total)
+
+**UI Filter Pattern — Inline Column Header Filters:**
+
+All list screens (Dashboard, vSphere, New Relic, CMDB) use inline column header filters instead of a top filter bar:
+- **Hostname column:** debounced text input (`Subject<string>` + 300 ms debounce + `distinctUntilChanged`)
+- **Multi-value columns:** reusable `MultiSelectComponent` (checkbox panel, Select All / Clear All, outside-click close)
+- Filter params are sent as repeated query string values (`explode: true`); the backend accepts `List<String>` and uses JPQL `IN (:param) OR :param IS EMPTY`
+
+| Screen | Column Header Filters |
+|--------|-----------------------|
+| Dashboard | Hostname (text, debounced) |
+| vSphere | Hostname (text), vCenter URL (multi-select), Power State (multi-select), Guest OS (multi-select) |
+| New Relic | Hostname (text), Account ID (multi-select), Linux Distro (multi-select) |
+| CMDB | Hostname (text), OS Version (multi-select), Op Status (multi-select) |
+
+**Shared Components (`frontend/src/app/shared/components/`):**
+- `multi-select/multi-select.component.ts` — Standalone Angular component; accepts `options: string[]`, optional `labelFn`, emits `selectionChange: string[]`; renders a checkbox panel with Select All / Clear All and closes on outside click
 
 **Key Routes:**
 ```

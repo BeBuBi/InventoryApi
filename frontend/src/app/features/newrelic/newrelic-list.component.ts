@@ -2,10 +2,11 @@ import { Component, OnInit, inject, DestroyRef } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Subject } from 'rxjs';
-import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
+import { Subject, of } from 'rxjs';
+import { debounceTime, distinctUntilChanged, switchMap, catchError } from 'rxjs/operators';
 import { NewRelicService } from '../../core/services/newrelic.service';
 import { NewRelicRecord } from '../../core/models/newrelic.model';
+import { MultiSelectComponent } from '../../shared/components/multi-select/multi-select.component';
 
 interface ColumnDef {
   key: keyof NewRelicRecord;
@@ -31,31 +32,19 @@ const IP_COLS      = new Set<keyof NewRelicRecord>(['ipv4Address', 'ipv6Address'
 @Component({
   selector: 'app-newrelic-list',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, MultiSelectComponent],
   template: `
     <div class="p-6">
       <div class="flex items-center justify-between mb-6">
         <h1 class="text-2xl font-bold text-gray-800">New Relic Hosts</h1>
       </div>
 
-      <!-- Filters + Column Picker toggle -->
-      <div class="bg-white rounded-lg shadow p-4 mb-4 flex flex-wrap items-center gap-3">
-        <input [(ngModel)]="search" (ngModelChange)="onSearchChange()" placeholder="Search hostname..."
-               class="border border-gray-300 rounded px-3 py-2 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        <select [(ngModel)]="filterAccountId" (ngModelChange)="onFilter()"
-                class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none">
-          <option value="">All Accounts</option>
-          <option *ngFor="let id of accountIds; trackBy: trackByValue" [value]="id">{{ id }}</option>
-        </select>
-        <select [(ngModel)]="filterEnv" (ngModelChange)="onFilter()"
-                class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none">
-          <option value="">All Environments</option>
-          <option *ngFor="let env of environments; trackBy: trackByValue" [value]="env">{{ env }}</option>
-        </select>
+      <!-- Toolbar: record count + column picker -->
+      <div class="bg-white rounded-lg shadow px-4 py-3 mb-4 flex items-center justify-between">
         <span class="text-sm text-gray-500">{{ totalElements }} records</span>
 
         <!-- Column picker button -->
-        <div class="relative ml-auto">
+        <div class="relative">
           <button (click)="showColumnPicker = !showColumnPicker"
                   class="flex items-center gap-1 px-3 py-2 border border-gray-300 rounded text-sm text-gray-600 hover:bg-gray-50 focus:outline-none">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -108,10 +97,39 @@ const IP_COLS      = new Set<keyof NewRelicRecord>(['ipv4Address', 'ipv6Address'
           <thead class="bg-gray-50">
             <tr>
               <th *ngFor="let col of visibleColumns; trackBy: trackByColKey"
-                  class="px-4 py-3 text-xs font-medium text-gray-500 uppercase whitespace-nowrap"
-                  [class.text-left]="!isNumericCol(col.key)"
-                  [class.text-right]="isNumericCol(col.key)">
-                {{ col.label }}
+                  class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap align-top">
+                <div>{{ col.label }}</div>
+
+                <!-- Inline filter: Hostname text input -->
+                <div *ngIf="col.key === 'hostname'">
+                  <input
+                    [(ngModel)]="search"
+                    (ngModelChange)="onSearchChange()"
+                    placeholder="Filter..."
+                    class="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none mt-1 font-normal normal-case tracking-normal"
+                  />
+                </div>
+
+                <!-- Inline filter: Account ID multi-select -->
+                <div *ngIf="col.key === 'accountId'">
+                  <app-multi-select
+                    [options]="accountIds"
+                    [selected]="filterAccountIds"
+                    placeholder="All"
+                    (selectedChange)="filterAccountIds = $event; onFilter()">
+                  </app-multi-select>
+                </div>
+
+                <!-- Inline filter: Linux Distro multi-select -->
+                <div *ngIf="col.key === 'linuxDistribution'">
+                  <app-multi-select
+                    [options]="linuxDistroOptions"
+                    [selected]="filterLinuxDistros"
+                    placeholder="All"
+                    (selectedChange)="filterLinuxDistros = $event; onFilter()">
+                  </app-multi-select>
+                </div>
+
               </th>
             </tr>
           </thead>
@@ -147,9 +165,9 @@ const IP_COLS      = new Set<keyof NewRelicRecord>(['ipv4Address', 'ipv6Address'
             <span class="text-gray-500">Rows:</span>
             <select [(ngModel)]="pageSize" (ngModelChange)="onPageSizeChange()"
                     class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none">
-              <option [value]="25">25</option>
-              <option [value]="50">50</option>
-              <option [value]="100">100</option>
+              <option [ngValue]="25">25</option>
+              <option [ngValue]="50">50</option>
+              <option [ngValue]="100">100</option>
             </select>
             <span class="text-gray-400">&middot;</span>
             <span>{{ totalElements }} records</span>
@@ -172,19 +190,19 @@ export class NewRelicListComponent implements OnInit {
 
   displayItems: NewRelicDisplayRow[] = [];
   visibleColumns: ColumnDef[] = [];
-  environments: string[] = [];
   accountIds: string[] = [];
+  linuxDistroOptions: string[] = [];
   totalElements = 0;
   totalPages = 0;
   currentPage = 0;
   pageSize = 25;
   search = '';
-  filterEnv = '';
-  filterAccountId = '';
+  filterAccountIds: string[] = [];
+  filterLinuxDistros: string[] = [];
   showColumnPicker = false;
 
   // Subject that drives debounced search-triggered loads.
-  private searchTrigger$ = new Subject<void>();
+  private searchTrigger$ = new Subject<string>();
 
   // All available columns — initial order and visibility matches the requested defaults
   columns: ColumnDef[] = [
@@ -214,10 +232,10 @@ export class NewRelicListComponent implements OnInit {
       .pipe(
         debounceTime(300),
         distinctUntilChanged(),
-        switchMap(() => this.newRelicService.list({
-          search: this.search,
-          environment: this.filterEnv,
-          accountId: this.filterAccountId,
+        switchMap(term => this.newRelicService.list({
+          search: term,
+          accountIds: this.filterAccountIds,
+          linuxDistros: this.filterLinuxDistros,
           page: this.currentPage,
           size: this.pageSize
         })),
@@ -231,21 +249,27 @@ export class NewRelicListComponent implements OnInit {
 
     this.loadImmediate();
 
-    this.newRelicService.getEnvironments()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(envs => this.environments = envs);
-
     this.newRelicService.getAccountIds()
-      .pipe(takeUntilDestroyed(this.destroyRef))
+      .pipe(
+        catchError(err => { console.error('Failed to load NR account IDs', err); return of([]); }),
+        takeUntilDestroyed(this.destroyRef)
+      )
       .subscribe(ids => this.accountIds = ids);
+
+    this.newRelicService.getLinuxDistros()
+      .pipe(
+        catchError(err => { console.error('Failed to load NR linux distros', err); return of([]); }),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe(distros => this.linuxDistroOptions = distros);
   }
 
   // Called for filter/page changes that should load immediately (no debounce needed).
   loadImmediate(): void {
     this.newRelicService.list({
       search: this.search,
-      environment: this.filterEnv,
-      accountId: this.filterAccountId,
+      accountIds: this.filterAccountIds,
+      linuxDistros: this.filterLinuxDistros,
       page: this.currentPage,
       size: this.pageSize
     })
@@ -260,7 +284,7 @@ export class NewRelicListComponent implements OnInit {
   // Keystroke handler — feeds the debounced pipeline.
   onSearchChange(): void {
     this.currentPage = 0;
-    this.searchTrigger$.next();
+    this.searchTrigger$.next(this.search);
   }
 
   onFilter(): void { this.currentPage = 0; this.loadImmediate(); }
@@ -298,10 +322,6 @@ export class NewRelicListComponent implements OnInit {
 
   trackByColKey(_index: number, col: ColumnDef): string {
     return col.key;
-  }
-
-  trackByValue(_index: number, value: string): string {
-    return value;
   }
 
   // Convert a raw API record into a display row by precomputing all derived values once.

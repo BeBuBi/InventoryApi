@@ -21,12 +21,4 @@ public class PagedResponse<T> {
         this.totalElements = page.getTotalElements();
         this.totalPages = page.getTotalPages();
     }
-
-    public PagedResponse(List<T> content, long totalElements, int totalPages, int number, int size) {
-        this.content = content;
-        this.totalElements = totalElements;
-        this.totalPages = totalPages;
-        this.page = number;
-        this.size = size;
-    }
 }

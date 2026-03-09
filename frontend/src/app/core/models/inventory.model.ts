@@ -50,36 +50,3 @@ export interface InventoryCounts {
   newrelic: number;
   cmdb: number;
 }
-
-export interface VsphereData {
-  hostname: string;
-  vmName: string;
-  cpuCount?: number;
-  cpuCores?: number;
-  memoryMb?: number;
-  memoryGb?: number;
-  powerState?: string;
-  guestOs?: string;
-  toolsStatus?: string;
-  ipv4Address?: string;
-  ipv6Address?: string;
-  lastSyncedAt?: string;
-}
-
-export interface NewRelicData {
-  hostname: string;
-  fullHostname?: string;
-  ipv4Address?: string;
-  ipv6Address?: string;
-  processorCount?: number;
-  coreCount?: number;
-  systemMemoryBytes?: number;
-  linuxDistribution?: string;
-  service?: string;
-  environment?: string;
-  team?: string;
-  location?: string;
-  accountId?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}

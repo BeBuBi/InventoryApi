@@ -166,6 +166,40 @@ paths:
       parameters:
         - $ref: '#/components/parameters/PageParam'
         - $ref: '#/components/parameters/SizeParam'
+        - name: search
+          in: query
+          description: Partial hostname match (debounced text filter on Hostname column header).
+          schema:
+            type: string
+        - name: sourceUrl
+          in: query
+          description: Filter by one or more vCenter source URLs. Use values returned by `GET /api/vsphere/vcenter-urls`. Supports multi-select.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+            example: ["https://vcenter.example.com"]
+        - name: powerState
+          in: query
+          description: Filter by one or more VM power states. Supports multi-select.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [poweredOn, poweredOff, suspended]
+        - name: guestOs
+          in: query
+          description: Filter by one or more guest OS values. Use values returned by `GET /api/vsphere/guest-os-types`. Supports multi-select.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
       responses:
         '200':
           description: Paginated list of vSphere records
@@ -173,6 +207,48 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VsphereRecordPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/vsphere/vcenter-urls:
+    get:
+      tags: [vSphere]
+      summary: List distinct vCenter URLs
+      description: Returns a sorted, deduplicated list of all `source_url` values present in the vsphere table. Used to populate the vCenter URL filter dropdown on the vSphere list screen.
+      operationId: listVcenterUrls
+      responses:
+        '200':
+          description: Sorted list of distinct vCenter URL strings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                  example: "https://vcenter.example.com"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/vsphere/guest-os-types:
+    get:
+      tags: [vSphere]
+      summary: List distinct guest OS types
+      description: Returns a sorted, deduplicated list of all `guest_os` values present in the vsphere table. Used to populate the Guest OS multi-select filter on the vSphere list screen.
+      operationId: listGuestOsTypes
+      responses:
+        '200':
+          description: Sorted list of distinct guest OS strings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                example: ["Ubuntu Linux (64-bit)", "Red Hat Enterprise Linux 8 (64-bit)"]
         '401':
           $ref: '#/components/responses/Unauthorized'
         '500':
@@ -253,6 +329,30 @@ paths:
       parameters:
         - $ref: '#/components/parameters/PageParam'
         - $ref: '#/components/parameters/SizeParam'
+        - name: search
+          in: query
+          description: Partial hostname match (debounced text filter on Hostname column header).
+          schema:
+            type: string
+        - name: accountId
+          in: query
+          description: Filter by one or more New Relic account IDs. Supports multi-select.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+            example: ["12345", "67890"]
+        - name: linuxDistro
+          in: query
+          description: Filter by one or more Linux distribution values. Use values returned by `GET /api/newrelic/linux-distros`. Supports multi-select.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
       responses:
         '200':
           description: Paginated list of New Relic records
@@ -260,6 +360,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/NewRelicRecordPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/newrelic/linux-distros:
+    get:
+      tags: [New Relic]
+      summary: List distinct Linux distributions
+      description: Returns a sorted, deduplicated list of all `linux_distribution` values present in the newrelic table. Used to populate the Linux Distro multi-select filter on the New Relic list screen.
+      operationId: listLinuxDistros
+      responses:
+        '200':
+          description: Sorted list of distinct Linux distribution strings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                example: ["Ubuntu 20.04", "Ubuntu 22.04", "Red Hat Enterprise Linux 8"]
         '401':
           $ref: '#/components/responses/Unauthorized'
         '500':
@@ -340,20 +461,35 @@ paths:
       parameters:
         - $ref: '#/components/parameters/PageParam'
         - $ref: '#/components/parameters/SizeParam'
-        - name: hostname
+        - name: search
           in: query
-          description: Partial hostname match (case-insensitive)
+          description: Partial hostname match (debounced text filter on Hostname column header).
           required: false
           schema:
             type: string
           example: web-prod
+        - name: osVersion
+          in: query
+          description: Filter by one or more OS version values. Use values returned by `GET /api/cmdb/os-versions`. Supports multi-select.
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+            example: ["8.7", "9.0"]
         - name: operationalStatus
           in: query
-          description: Filter by operational status
+          description: Filter by one or more operational status values. Use values returned by `GET /api/cmdb/op-statuses`. Supports multi-select.
           required: false
+          style: form
+          explode: true
           schema:
-            type: string
-          example: operational
+            type: array
+            items:
+              type: string
+            example: [operational, non-operational]
       responses:
         '200':
           description: Paginated list of CMDB records
@@ -368,12 +504,57 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /api/cmdb/operational-statuses:
+  /api/cmdb/os-versions:
+    get:
+      tags: [CMDB]
+      summary: List distinct OS versions
+      description: Returns a sorted, deduplicated list of all `os_version` values present in the cmdb table. Used to populate the OS Version multi-select filter on the CMDB list screen.
+      operationId: listCmdbOsVersions
+      responses:
+        '200':
+          description: Sorted list of distinct OS version strings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                example: ["7.9", "8.7", "9.0"]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/cmdb/op-statuses:
     get:
       tags: [CMDB]
       summary: List distinct operational statuses
-      description: Returns a list of all distinct operational status values present in the CMDB table.
+      description: Returns a sorted, deduplicated list of all `operational_status` values present in the cmdb table. Used to populate the Op Status multi-select filter on the CMDB list screen.
+      operationId: listCmdbOpStatuses
+      responses:
+        '200':
+          description: Sorted list of distinct operational status strings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                example: [operational, non-operational, retired]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/cmdb/operational-statuses:
+    get:
+      tags: [CMDB]
+      summary: List distinct operational statuses (deprecated — use /api/cmdb/op-statuses)
+      description: |
+        Deprecated. Returns a list of all distinct operational status values present in the CMDB table.
+        Use `GET /api/cmdb/op-statuses` instead.
       operationId: listCmdbOperationalStatuses
+      deprecated: true
       responses:
         '200':
           description: List of distinct operational status values
@@ -386,6 +567,70 @@ paths:
                 example: [operational, non-operational, retired]
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/cmdb/sync:
+    post:
+      tags: [CMDB]
+      summary: Trigger manual CMDB sync
+      description: Immediately starts a CMDB sync job, ignoring the configured schedule.
+      operationId: triggerCmdbSync
+      responses:
+        '202':
+          description: Sync job accepted and started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncAccepted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: A sync job is already running
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/cmdb/sync/status:
+    get:
+      tags: [CMDB]
+      summary: Get CMDB sync status
+      description: Returns the status and result of the most recent CMDB sync run.
+      operationId: getCmdbSyncStatus
+      responses:
+        '200':
+          description: CMDB sync status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/cmdb/{hostname}:
+    parameters:
+      - $ref: '#/components/parameters/HostnameParam'
+
+    get:
+      tags: [CMDB]
+      summary: Get CMDB record by hostname
+      operationId: getCmdbByHostname
+      responses:
+        '200':
+          description: CMDB record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
 

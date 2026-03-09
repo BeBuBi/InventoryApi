@@ -25,15 +25,21 @@ public class CmdbController {
     @GetMapping
     public PagedResponse<CmdbResponse> list(
             @RequestParam(required = false) String search,
-            @RequestParam(required = false) String operationalStatus,
+            @RequestParam(required = false) List<String> opStatuses,
+            @RequestParam(required = false) List<String> osVersions,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return cmdbService.list(search, operationalStatus, page, size);
+        return cmdbService.list(search, opStatuses, osVersions, page, size);
     }
 
     @GetMapping("/operational-statuses")
     public List<String> listOperationalStatuses() {
         return cmdbService.listOperationalStatuses();
+    }
+
+    @GetMapping("/os-versions")
+    public List<String> listOsVersions() {
+        return cmdbService.listOsVersions();
     }
 
     @GetMapping("/{hostname}")

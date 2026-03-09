@@ -13,13 +13,15 @@ export class CmdbService {
 
   list(params: {
     search?: string;
-    operationalStatus?: string;
+    opStatuses?: string[];
+    osVersions?: string[];
     page?: number;
     size?: number;
   }): Observable<PagedResponse<CmdbRecord>> {
     let p = new HttpParams();
     if (params.search) p = p.set('search', params.search);
-    if (params.operationalStatus) p = p.set('operationalStatus', params.operationalStatus);
+    (params.opStatuses ?? []).forEach(v => p = p.append('opStatuses', v));
+    (params.osVersions ?? []).forEach(v => p = p.append('osVersions', v));
     p = p.set('page', params.page ?? 0);
     p = p.set('size', params.size ?? 20);
     return this.http.get<PagedResponse<CmdbRecord>>(this.base, { params: p });
@@ -27,6 +29,10 @@ export class CmdbService {
 
   listOperationalStatuses(): Observable<string[]> {
     return this.http.get<string[]>(`${this.base}/operational-statuses`);
+  }
+
+  getOsVersions(): Observable<string[]> {
+    return this.http.get<string[]>(`${this.base}/os-versions`);
   }
 
   getByHostname(hostname: string): Observable<CmdbRecord> {

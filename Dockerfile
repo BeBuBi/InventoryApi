@@ -25,6 +25,9 @@ FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
+# Install sqlite for DB inspection / debugging
+RUN apk add --no-cache sqlite
+
 # Create non-root user
 RUN addgroup -S sis && adduser -S sis -G sis
 

@@ -16,7 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./gradlew test
 
 # Run a single test class
-./gradlew test --tests "com.example.inventorysystem.service.InventoryServiceTest"
+./gradlew test --tests "com.cox.inventorysystem.service.InventoryServiceTest"
 
 # Clean build
 ./gradlew clean build

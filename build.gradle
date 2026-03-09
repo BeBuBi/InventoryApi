@@ -33,24 +33,13 @@ dependencies {
     // Flyway (version managed by Spring Boot BOM — 9.x supports SQLite natively)
     implementation 'org.flywaydb:flyway-core'
 
-    // JJWT (stub — auth wired in next pass)
-    implementation 'io.jsonwebtoken:jjwt-api:0.12.5'
-    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.5'
-    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.5'
-
     // Lombok
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
 
-    // Test
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testImplementation 'org.springframework.security:spring-security-test'
 }
 
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs << '-parameters'
 }
 
-tasks.named('test') {
-    useJUnitPlatform()
-}

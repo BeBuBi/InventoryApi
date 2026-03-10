@@ -186,8 +186,8 @@ Schedule: Fixed polling interval (every 1 minute) to check sync_schedule table
 3. If match:
    a. Query all credentials WHERE service = 'vsphere' AND enabled = 1
    b. For each enabled credential:
-      i.  Decrypt config JSON using AES-256 + ENCRYPTION_KEY
-      ii. Connect to vCenter API using decrypted host, username, password
+      i.  Read config JSON from credentials table
+      ii. Connect to vCenter API using host, username, password
       iii.Fetch all VM inventory from that vCenter
       iv. Upsert records into vsphere table
       v.  Update last_synced_at timestamp
@@ -203,8 +203,8 @@ Schedule: Fixed polling interval (every 1 minute) to check sync_schedule table
 3. If match:
    a. Query all credentials WHERE service = 'newrelic' AND enabled = 1
    b. For each enabled credential:
-      i.  Decrypt config JSON using AES-256 + ENCRYPTION_KEY
-      ii. Connect to New Relic NerdGraph API using decrypted apiKey and accountId
+      i.  Read config JSON from credentials table
+      ii. Connect to New Relic NerdGraph API using apiKey and accountId
       iii.Query all infrastructure entities for that account
       iv. Upsert records into newrelic table
       v.  Update last_synced_at timestamp
@@ -220,7 +220,7 @@ Schedule: Fixed polling interval (every 1 minute) to check sync_schedule table
 3. If match:
    a. Query all credentials WHERE service = 'cmdb' AND enabled = 1
    b. For each enabled credential:
-      i.   Decrypt config JSON using AES-256 + ENCRYPTION_KEY
+      i.   Read config JSON from credentials table
       ii.  Extract token_url, api_url, client_id, client_secret, username, password
       iii. POST to token_url with OAuth2 password grant → obtain Bearer token
       iv.  GET api_url with Authorization: Bearer header → receive CMDB asset list
@@ -436,14 +436,14 @@ All data is stored in a **single SQLite database file** (`data/inventory.db`) ow
 
 **Credentials Table**
 
-vSphere, New Relic, and CMDB connection credentials are stored in a `credentials` table in the database. Multiple accounts per service are supported — for example, multiple vCenter instances, multiple New Relic accounts, or multiple ServiceNow instances. Each credential entry has an `enabled` flag that controls whether the sync job will use it. Passwords and API keys are encrypted at rest using AES-256. The Backend Service reloads enabled credentials before each sync job run, so changes take effect without restarting.
+vSphere, New Relic, and CMDB connection credentials are stored in a `credentials` table in the database. Multiple accounts per service are supported — for example, multiple vCenter instances, multiple New Relic accounts, or multiple ServiceNow instances. Each credential entry has an `enabled` flag that controls whether the sync job will use it. The Backend Service reloads enabled credentials before each sync job run, so changes take effect without restarting.
 
 ```sql
 CREATE TABLE credentials (
     id          INTEGER     PRIMARY KEY AUTOINCREMENT,
     service     TEXT        NOT NULL,             -- 'vsphere', 'newrelic', or 'cmdb'
     name        TEXT        NOT NULL,             -- user-defined label e.g. 'Name|AccountId'
-    config      TEXT        NOT NULL,             -- AES-256 encrypted JSON
+    config      TEXT        NOT NULL,             -- JSON config (plain text)
     enabled     INTEGER     NOT NULL DEFAULT 1,   -- 1 = enabled, 0 = disabled
     created_at  DATETIME    NOT NULL DEFAULT (datetime('now')),
     updated_at  DATETIME    NOT NULL DEFAULT (datetime('now')),
@@ -454,7 +454,7 @@ CREATE TABLE credentials (
 CREATE INDEX idx_credentials_service_enabled ON credentials(service, enabled);
 ```
 
-The `config` column stores an encrypted JSON string. When decrypted, the structure is:
+The `config` column stores a plain-text JSON string. The structure is:
 
 For vSphere:
 ```json
@@ -529,17 +529,6 @@ CREATE TABLE sync_schedule (
 | 1  | vsphere  | `0 0 2 * * *`       | 1       | Every day at 2:00 AM   |
 | 2  | newrelic | `0 0 6 * * MON-FRI` | 1       | Weekdays at 6:00 AM    |
 | 3  | cmdb     | `0 0 3 * * *`       | 0       | Every day at 3:00 AM   |
-
-The AES encryption key itself is the **only secret** that remains in a Kubernetes Secret (one key, not per-service credentials):
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: encryption-key
-type: Opaque
-stringData:
-  ENCRYPTION_KEY: your-32-byte-aes-key-here
-```
 
 **WAL Mode (Recommended)**
 
@@ -618,31 +607,9 @@ spec:
       storage: 2Gi
 ```
 
-### 8.3 Secrets Management
+### 8.3 Credential Management
 
-vSphere and New Relic credentials are **stored in the database** (encrypted) and managed by the user via the UI. The only Kubernetes Secret required is the **AES encryption key** used to encrypt/decrypt credentials at rest:
-
-```yaml
-# Shared encryption key - the only Kubernetes Secret needed
-apiVersion: v1
-kind: Secret
-metadata:
-  name: encryption-key
-type: Opaque
-stringData:
-  ENCRYPTION_KEY: your-32-byte-aes-key-here
-```
-
-This key is injected as an environment variable into the Backend Service so it can encrypt and decrypt credentials:
-
-```yaml
-env:
-  - name: ENCRYPTION_KEY
-    valueFrom:
-      secretKeyRef:
-        name: encryption-key
-        key: ENCRYPTION_KEY
-```
+vSphere, New Relic, and CMDB credentials are **stored in the database as plain text** and managed by the user via the UI. No Kubernetes Secrets are required for credentials.
 
 **Credential flow:**
 ```
@@ -651,11 +618,10 @@ env:
 3. Admin enters service type, name, host/username/password or API key
 4. Admin sets enabled = true or false
 5. Angular calls POST /api/settings/credentials to Backend Service
-6. Backend Service encrypts the config JSON using AES-256 + ENCRYPTION_KEY
-7. Encrypted credential is saved to credentials table in data/inventory.db
-8. At next sync, Backend Service queries WHERE service = 'vsphere' AND enabled = 1
-9. Each enabled credential is decrypted and used to sync from that account
-10. Disabled credentials are silently skipped
+6. Config JSON is saved to credentials table in data/inventory.db
+7. At next sync, Backend Service queries WHERE service = 'vsphere' AND enabled = 1
+8. Each enabled credential is used to sync from that account
+9. Disabled credentials are silently skipped
 ```
 
 ### 8.4 Docker Images
@@ -673,9 +639,8 @@ Two Docker images are built — one for the backend, one for the frontend.
 | Concern | Approach |
 |---------|----------|
 | Authentication | JWT (JJWT 0.12) — **planned, not yet enforced**; Spring Security currently uses `permitAll()` |
-| vSphere, New Relic & CMDB credentials | Stored encrypted (AES-256) in database, editable via UI |
-| Encryption key | AES key stored as Kubernetes Secret, injected as env variable |
-| Credential masking | `GET /api/settings/credentials` list endpoint returns metadata only — `config` is never decrypted on list; `GET /api/settings/credentials/{id}` decrypts and returns config with sensitive fields (`password`, `apiKey`, `client_secret`) masked as `"********"` |
+| vSphere, New Relic & CMDB credentials | Stored as plain text in database, editable via UI |
+| Credential masking | `GET /api/settings/credentials` list endpoint returns metadata only — `config` omitted on list; `GET /api/settings/credentials/{id}` returns config with sensitive fields (`password`, `apiKey`, `client_secret`) masked as `"********"` |
 | HTTPS | TLS terminated at Backend Service (LoadBalancer) |
 | CORS | Configured in Backend Service to allow Angular frontend origin only |
 | No internal traffic | Single service — no inter-service communication needed |

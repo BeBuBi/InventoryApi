@@ -41,7 +41,6 @@ USER coxapp
 
 # DB stored in /app/data (mount a volume here in production)
 ENV DB_PATH=/app/data/inventory.db
-ENV ENCRYPTION_KEY=""
 ENV APP_CORS_ALLOWED_ORIGINS=http://localhost:4200
 
 EXPOSE 8080

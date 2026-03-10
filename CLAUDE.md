@@ -40,7 +40,6 @@ npm test
 ```
 
 ### Required Environment Variables
-- `ENCRYPTION_KEY` — 32-byte (256-bit) key for AES-256-GCM credential encryption (mandatory at runtime; a dev default is set in `application.properties`)
 - `app.cors.allowed-origins` — CORS origin for frontend (default: `http://localhost:4200`)
 - `DB_PATH` — SQLite file path (default: `./data/inventory.db`)
 
@@ -98,7 +97,7 @@ nullIfBlank(search)   // returns null if blank, value otherwise
 AND (:param IS NULL OR field LIKE CONCAT('%', :param, '%'))
 ```
 
-**Credentials** are AES-256-GCM encrypted via `EncryptionService` before writing to the `credentials` table. The `GET /api/settings/credentials` list endpoint never decrypts `config` — secrets never travel over the wire on list calls.
+**Credentials** are stored as plain text in the `credentials` table. `EncryptionService` is a no-op pass-through — encryption can be re-enabled there without changing any callers. The `GET /api/settings/credentials` list endpoint still omits `config` on list calls; only the single-credential `GET /api/settings/credentials/{id}` returns the full config.
 
 **`operationalStatus`** is stored as ServiceNow numeric codes (`'1'`=Operational, `'2'`=Repair in Progress, `'3'`=Do Not Use, `'6'`=Retired, `'7'`=Stolen) — **never** English labels. All `opStatusClass()` and `opStatusLabel()` methods must match on these numeric strings.
 

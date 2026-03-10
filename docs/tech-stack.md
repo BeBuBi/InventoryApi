@@ -117,17 +117,7 @@ spring.flyway.baseline-on-migrate=false
 
 ---
 
-### 2.7 Encryption
-
-| Technology | Purpose |
-|------------|---------|
-| JDK `javax.crypto` (AES-256-GCM) | Encrypt/decrypt credential config stored in database |
-
-The AES-256 encryption key is injected at runtime via the `ENCRYPTION_KEY` environment variable (sourced from a Kubernetes Secret). It is never stored in source code or the database.
-
----
-
-### 2.8 Cron Expression Parsing
+### 2.7 Cron Expression Parsing
 
 | Technology | Purpose |
 |------------|---------|
@@ -276,11 +266,10 @@ export const environment = {
 | Concern | Technology | Detail |
 |---------|------------|--------|
 | Authentication | JWT (JJWT 0.12) — **planned, not yet enforced** | Spring Security currently uses `permitAll()`; JWT filter not yet implemented |
-| Credential encryption | AES-256-GCM (JDK) | Applied before writing to DB, reversed on read |
-| Encryption key storage | Kubernetes Secret | Injected as `ENCRYPTION_KEY` env variable |
+| Credential storage | Plain text in database | `EncryptionService` is a no-op pass-through; encryption can be re-enabled without changing callers |
 | HTTPS | TLS at Kubernetes LoadBalancer | Terminated at the service boundary |
 | CORS | Spring Security | Configured to allow Angular frontend origin only |
-| Credential list security | Application layer | `GET /api/settings/credentials` (list) returns metadata only — `config` is never decrypted on list; no secrets travel over the wire |
+| Credential list security | Application layer | `GET /api/settings/credentials` (list) returns metadata only — `config` omitted on list calls |
 
 ---
 
@@ -312,7 +301,6 @@ export const environment = {
 | Service (LoadBalancer) | ✓ | ✓ |
 | ConfigMap | ✓ | — |
 | PersistentVolumeClaim | ✓ (2 Gi, `inventory.db`) | — |
-| Secret | ✓ (`ENCRYPTION_KEY`) | — |
 
 ---
 
@@ -362,7 +350,6 @@ export const environment = {
 | Migrations | Flyway | 10.x |
 | Scheduler | Spring Scheduler | (included) |
 | Auth | Spring Security + JJWT | 0.12.x |
-| Encryption | JDK AES-256-GCM | (built-in) |
 | HTTP client | Spring RestClient | (Spring 6.1+) |
 | Database | SQLite | 3.45.x |
 | JDBC driver | xerial/sqlite-jdbc | 3.45.x |

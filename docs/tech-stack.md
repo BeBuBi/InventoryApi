@@ -1,8 +1,8 @@
 # Technology Stack
 ## Server Inventory System
 
-**Version:** 1.3
-**Last Updated:** 2026-03-09
+**Version:** 1.4
+**Last Updated:** 2026-03-10
 
 ---
 
@@ -58,7 +58,7 @@ Java 17 LTS is chosen for long-term support and broad compatibility with Spring 
 | Spring Security | (included) | JWT authentication filter, CORS config |
 | Spring Validation | (included) | Request body validation (`@Valid`) |
 
-**Why Spring Boot 3.2:** Native support for Java 21, improved observability, and active long-term community support.
+**Why Spring Boot 3.2:** Compatible with Java 17 LTS, improved observability, and active long-term community support.
 
 ---
 
@@ -75,7 +75,7 @@ Java 17 LTS is chosen for long-term support and broad compatibility with Spring 
 spring.datasource.url=jdbc:sqlite:${DB_PATH:./data/inventory.db}?journal_mode=WAL&busy_timeout=5000
 spring.datasource.driver-class-name=org.sqlite.JDBC
 spring.jpa.database-platform=org.hibernate.community.dialect.SQLiteDialect
-spring.jpa.hibernate.ddl-auto=validate
+spring.jpa.hibernate.ddl-auto=none
 ```
 
 ---
@@ -193,7 +193,9 @@ TailwindCSS integrates with Angular via PostCSS and works alongside Angular's co
 |-----------|------|---------|
 | `MultiSelectComponent` | `frontend/src/app/shared/components/multi-select/multi-select.component.ts` | Reusable standalone dropdown with checkbox list, Select All / Clear All, outside-click close, and optional `labelFn` mapping |
 
-The `MultiSelectComponent` is used by vSphere (vCenter URL, Power State, Guest OS), New Relic (Account ID, Linux Distro), and CMDB (OS Version, Op Status) list screens to render inline column header multi-select filters. It emits a `selectionChange: string[]` event that the parent component maps to API query params (`style: form, explode: true`).
+The `MultiSelectComponent` is used by vSphere (vCenter URL, Power State, Guest OS), New Relic (Account ID, Linux Distro), CMDB (OS Version, Op Status), and the report pages — Missing from CMDB (Sources, Power State dropdowns) — to render inline column header multi-select filters. The IP Discrepancy report uses a plain text filter for hostname. It emits a `selectionChange: string[]` event that the parent component maps to API query params (`style: form, explode: true`).
+
+**CSV Export (report pages):** Both report pages include an "Export CSV" button implemented entirely in the frontend. On click, the component re-requests the same API endpoint with `size=10000` and `page=0`, respecting all currently active filters. This exports all matching records (up to 10,000), not just the current page. There is no dedicated CSV export backend endpoint.
 
 ---
 
@@ -278,7 +280,7 @@ export const environment = {
 | Encryption key storage | Kubernetes Secret | Injected as `ENCRYPTION_KEY` env variable |
 | HTTPS | TLS at Kubernetes LoadBalancer | Terminated at the service boundary |
 | CORS | Spring Security | Configured to allow Angular frontend origin only |
-| Credential list security | Application layer | `GET /api/credentials` (list) returns metadata only — `config` is never decrypted on list; no secrets travel over the wire |
+| Credential list security | Application layer | `GET /api/settings/credentials` (list) returns metadata only — `config` is never decrypted on list; no secrets travel over the wire |
 
 ---
 

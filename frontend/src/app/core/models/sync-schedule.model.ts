@@ -1,6 +1,6 @@
 export interface SyncSchedule {
   id: number;
-  service: 'vsphere' | 'newrelic';
+  service: 'vsphere' | 'newrelic' | 'cmdb';
   cronExpr: string;
   enabled: boolean;
   description?: string;

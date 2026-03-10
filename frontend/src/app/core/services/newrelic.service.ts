@@ -13,7 +13,6 @@ export class NewRelicService {
 
   list(params: {
     search?: string;
-    application?: string;
     environment?: string;
     accountIds?: string[];
     linuxDistros?: string[];
@@ -22,7 +21,6 @@ export class NewRelicService {
   }): Observable<PagedResponse<NewRelicRecord>> {
     let p = new HttpParams();
     if (params.search) p = p.set('search', params.search);
-    if (params.application) p = p.set('application', params.application);
     if (params.environment) p = p.set('environment', params.environment);
     (params.accountIds ?? []).forEach(v => p = p.append('accountIds', v));
     (params.linuxDistros ?? []).forEach(v => p = p.append('linuxDistros', v));
@@ -37,10 +35,6 @@ export class NewRelicService {
 
   getLinuxDistros(): Observable<string[]> {
     return this.http.get<string[]>(`${this.base}/linux-distros`);
-  }
-
-  getByHostname(hostname: string): Observable<NewRelicRecord> {
-    return this.http.get<NewRelicRecord>(`${this.base}/${hostname}`);
   }
 
   triggerSync(): Observable<SyncStatus> {

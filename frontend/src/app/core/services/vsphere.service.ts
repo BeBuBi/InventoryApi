@@ -37,10 +37,6 @@ export class VsphereService {
     return this.http.get<string[]>(`${this.base}/guest-os-types`);
   }
 
-  getByHostname(hostname: string): Observable<VsphereRecord> {
-    return this.http.get<VsphereRecord>(`${this.base}/${hostname}`);
-  }
-
   triggerSync(): Observable<SyncStatus> {
     return this.http.post<SyncStatus>(`${this.base}/sync`, null);
   }

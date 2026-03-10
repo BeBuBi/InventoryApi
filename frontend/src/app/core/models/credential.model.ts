@@ -1,6 +1,6 @@
 export interface Credential {
   id: number;
-  service: 'vsphere' | 'newrelic';
+  service: 'vsphere' | 'newrelic' | 'cmdb';
   name: string;
   enabled: boolean;
   createdAt: string;

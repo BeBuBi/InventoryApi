@@ -1,8 +1,8 @@
 # Database Schema
 ## Server Inventory System
 
-**Version:** 1.3
-**Last Updated:** 2026-03-07
+**Version:** 1.4
+**Last Updated:** 2026-03-10
 **Database:** SQLite 3.x
 **Migration Tool:** Flyway
 
@@ -113,13 +113,16 @@ SELECT
     c.operational_status,
     c.classification,
     c.last_synced_at        AS cmdb_last_synced,
-    -- Computed: comma-separated list of sources that have a record for this hostname
-    (CASE WHEN v.hostname IS NOT NULL THEN 'vsphere' ELSE '' END ||
-     CASE WHEN n.hostname IS NOT NULL THEN
-       CASE WHEN v.hostname IS NOT NULL THEN ',newrelic' ELSE 'newrelic' END ELSE '' END ||
-     CASE WHEN c.hostname IS NOT NULL THEN
-       CASE WHEN v.hostname IS NOT NULL OR n.hostname IS NOT NULL THEN ',cmdb' ELSE 'cmdb' END ELSE '' END
-    ) AS sources
+    -- Meta
+    CASE
+        WHEN v.hostname IS NOT NULL AND n.hostname IS NOT NULL AND c.hostname IS NOT NULL THEN 'vsphere,newrelic,cmdb'
+        WHEN v.hostname IS NOT NULL AND n.hostname IS NOT NULL                           THEN 'vsphere,newrelic'
+        WHEN v.hostname IS NOT NULL AND c.hostname IS NOT NULL                           THEN 'vsphere,cmdb'
+        WHEN n.hostname IS NOT NULL AND c.hostname IS NOT NULL                           THEN 'newrelic,cmdb'
+        WHEN v.hostname IS NOT NULL                                                      THEN 'vsphere'
+        WHEN n.hostname IS NOT NULL                                                      THEN 'newrelic'
+        ELSE                                                                                  'cmdb'
+    END AS sources
 FROM (
     SELECT hostname FROM vsphere
     UNION SELECT hostname FROM newrelic

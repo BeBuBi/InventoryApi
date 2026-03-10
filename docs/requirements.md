@@ -1,9 +1,9 @@
 # Requirements Document
 ## Server Inventory System
 
-**Version:** 1.2
+**Version:** 1.3
 **Author:** Solo Developer
-**Last Updated:** 2026-03-09
+**Last Updated:** 2026-03-10
 **Status:** Draft
 
 ---
@@ -112,7 +112,7 @@ The **Server Inventory System** is a backend application that consolidates serve
 | SCH-10 | Users shall be able to filter the New Relic list by Account ID (multi-select) | Medium | Implemented |
 | SCH-11 | Users shall be able to filter the New Relic list by Linux Distribution (multi-select) | Medium | Implemented (`GET /api/newrelic/linux-distros`) |
 | SCH-12 | Users shall be able to filter the CMDB list by OS Version (multi-select) | Medium | Implemented (`GET /api/cmdb/os-versions`) |
-| SCH-13 | Users shall be able to filter the CMDB list by Operational Status (multi-select) | Medium | Implemented (`GET /api/cmdb/op-statuses`) |
+| SCH-13 | Users shall be able to filter the CMDB list by Operational Status (multi-select) | Medium | Implemented (`GET /api/cmdb/operational-statuses`) |
 | SCH-14 | Multi-select filter panels shall support Select All / Clear All and close on outside click | Medium | Implemented (shared `MultiSelectComponent`) |
 | SCH-15 | Backend filter params for dropdown filters shall accept multiple values (list) with `IN` guard | High | Implemented (all `List<String>` + JPQL `IS NULL` guard via `nullIfEmpty()` helper) |
 
@@ -127,6 +127,9 @@ The **Server Inventory System** is a backend application that consolidates serve
 | API-05 | The API shall support pagination via `page` and `size` query parameters | High |
 | API-06 | The API shall return appropriate HTTP status codes (200, 400, 404, 500) | High |
 | API-07 | The API shall include an OpenAPI (Swagger) specification | Medium |
+| API-08 | The API shall expose `GET /api/reports/missing-from-cmdb` (filters: search, powerState, sources, page, size; default size 25) | High |
+| API-09 | The API shall expose `GET /api/reports/missing-from-cmdb/count` returning the total count of hosts missing from CMDB | Medium |
+| API-10 | The API shall expose `GET /api/reports/ip-discrepancy` (filters: search, page, size; default size 25) | High |
 
 ### 4.7 Dashboard & UI
 
@@ -142,6 +145,9 @@ The **Server Inventory System** is a backend application that consolidates serve
 | UI-08 | The vSphere, New Relic, and CMDB list screens shall use inline column header filters instead of a top filter bar | High | Implemented |
 | UI-09 | The Power State column shall be visible by default on the vSphere screen (after Hostname) | Medium | Implemented |
 | UI-10 | The OS column on the CMDB screen shall be hidden by default | Medium | Implemented |
+| UI-11 | The system shall provide a "Missing from CMDB" report page listing hosts found in vSphere or New Relic that have no matching CMDB record | High | Implemented (`/reports/missing-from-cmdb`) |
+| UI-12 | The system shall provide an "IP Address Discrepancy" report page listing hosts where at least one vSphere or New Relic IPv4 is absent from the CMDB IP list | High | Implemented (`/reports/ip-discrepancy`) |
+| UI-13 | Both report pages shall support CSV export of all records matching the current filters (not just the visible page) | Medium | Implemented (frontend-only: re-requests with `size=10000`) |
 
 ---
 
@@ -167,9 +173,9 @@ The **Server Inventory System** is a backend application that consolidates serve
 
 | ID | Requirement |
 |----|-------------|
-| SEC-01 | API keys for vSphere and New Relic shall be stored as environment variables, not in source code |
-| SEC-02 | The REST API shall require authentication (API key or JWT) |
-| SEC-03 | The dashboard shall require login |
+| SEC-01 | Credentials for vSphere, New Relic, and CMDB shall be stored AES-256 encrypted in the database, not in source code; the only Kubernetes Secret required is the `ENCRYPTION_KEY` |
+| SEC-02 | The REST API shall require authentication (JWT) — **planned, not yet enforced**; Spring Security is currently configured with `permitAll()` for all routes |
+| SEC-03 | The dashboard shall require login — **planned, not yet enforced**; no auth guard is implemented on the frontend |
 
 ### 5.4 Maintainability
 

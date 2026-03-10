@@ -35,10 +35,6 @@ export class CmdbService {
     return this.http.get<string[]>(`${this.base}/os-versions`);
   }
 
-  getByHostname(hostname: string): Observable<CmdbRecord> {
-    return this.http.get<CmdbRecord>(`${this.base}/${hostname}`);
-  }
-
   triggerSync(): Observable<SyncStatus> {
     return this.http.post<SyncStatus>(`${this.base}/sync`, null);
   }

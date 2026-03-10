@@ -1,8 +1,8 @@
 # Data Model
 ## Server Inventory System
 
-**Version:** 1.2
-**Last Updated:** 2026-03-07
+**Version:** 1.3
+**Last Updated:** 2026-03-10
 **Database:** SQLite 3.x
 
 ---
@@ -77,13 +77,13 @@ The data model consists of five physical tables and one read-only SQL VIEW, all 
 │         newrelic        │     │        credentials       │
 │─────────────────────────│     │─────────────────────-────│
 │ hostname (PK)           │     │ id (PK)                  │
-│ fullHostname            │     │ service                  │
-│ ipv4Address             │     │ name                     │
-│ ipV6Address             │     │ config (encrypted)       │
-│ coreCount               │     │ enabled                  │
-│ processorCount          │     │ created_at               │
-│ systemMemoryBytes       │     │ updated_at               │
-│ linuxDistribution       │     └─────────────────────────┘
+│ full_hostname           │     │ service                  │
+│ ipv4_address            │     │ name                     │
+│ ipv6_address            │     │ config (encrypted)       │
+│ processor_count         │     │ enabled                  │
+│ core_count              │     │ created_at               │
+│ system_memory_bytes     │     │ updated_at               │
+│ linux_distribution      │     └─────────────────────────┘
 │ service                 │
 │ environment             │
 │ team                    |

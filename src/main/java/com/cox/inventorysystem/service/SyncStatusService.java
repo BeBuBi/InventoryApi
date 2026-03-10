@@ -26,8 +26,7 @@ public class SyncStatusService {
     }
 
     public void markSuccess(String service) {
-        SyncState prev = statusMap.getOrDefault(service, new SyncState(State.IDLE, null, null));
-        statusMap.put(service, new SyncState(State.SUCCESS, Instant.now(), prev.lastError()));
+        statusMap.put(service, new SyncState(State.SUCCESS, Instant.now(), null));
     }
 
     public void markFailed(String service, String error) {

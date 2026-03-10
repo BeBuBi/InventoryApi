@@ -5,20 +5,18 @@ info:
   description: |
     REST API for the Server Inventory System.
 
-    Manages server asset inventory and provides access to VMware vSphere and
-    New Relic sync data. All endpoints require JWT authentication.
+    Manages server asset inventory and provides access to VMware vSphere,
+    New Relic, and ServiceNow CMDB sync data.
 
-    **Authentication:** Pass a JWT token in the `Authorization: Bearer <token>` header.
-  version: 1.0.0
+    **Authentication:** Not yet enforced. Spring Security is currently configured
+    with `permitAll()` for all routes. JWT authentication is planned for a future iteration.
+  version: 1.1.0
 
 servers:
   - url: http://localhost:8080
     description: Local development
   - url: https://inventory.example.com
     description: Production
-
-security:
-  - BearerAuth: []
 
 tags:
   - name: Inventory
@@ -35,6 +33,8 @@ tags:
     description: CMDB configuration item records synced from ServiceNow
   - name: Schedule
     description: Sync schedule configuration per service
+  - name: Reports
+    description: Cross-source inventory discrepancy reports
 
 # ==============================================================
 # PATHS
@@ -171,7 +171,7 @@ paths:
           description: Partial hostname match (debounced text filter on Hostname column header).
           schema:
             type: string
-        - name: sourceUrl
+        - name: sourceUrls
           in: query
           description: Filter by one or more vCenter source URLs. Use values returned by `GET /api/vsphere/vcenter-urls`. Supports multi-select.
           style: form
@@ -181,7 +181,7 @@ paths:
             items:
               type: string
             example: ["https://vcenter.example.com"]
-        - name: powerState
+        - name: powerStates
           in: query
           description: Filter by one or more VM power states. Supports multi-select.
           style: form
@@ -191,7 +191,7 @@ paths:
             items:
               type: string
               enum: [poweredOn, poweredOff, suspended]
-        - name: guestOs
+        - name: guestOsTypes
           in: query
           description: Filter by one or more guest OS values. Use values returned by `GET /api/vsphere/guest-os-types`. Supports multi-select.
           style: form
@@ -334,7 +334,17 @@ paths:
           description: Partial hostname match (debounced text filter on Hostname column header).
           schema:
             type: string
-        - name: accountId
+        - name: service
+          in: query
+          description: Filter by service name custom attribute.
+          schema:
+            type: string
+        - name: environment
+          in: query
+          description: Filter by environment custom attribute.
+          schema:
+            type: string
+        - name: accountIds
           in: query
           description: Filter by one or more New Relic account IDs. Supports multi-select.
           style: form
@@ -344,7 +354,7 @@ paths:
             items:
               type: string
             example: ["12345", "67890"]
-        - name: linuxDistro
+        - name: linuxDistros
           in: query
           description: Filter by one or more Linux distribution values. Use values returned by `GET /api/newrelic/linux-distros`. Supports multi-select.
           style: form
@@ -385,6 +395,38 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalServerError'
+
+  /api/newrelic/environments:
+    get:
+      tags: [New Relic]
+      summary: List distinct environments
+      description: Returns distinct environment values from New Relic records for use in multi-select filters.
+      operationId: listNewRelicEnvironments
+      responses:
+        '200':
+          description: List of environment strings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /api/newrelic/accounts:
+    get:
+      tags: [New Relic]
+      summary: List distinct account IDs
+      description: Returns distinct account_id values from New Relic records for use in multi-select filters.
+      operationId: listNewRelicAccounts
+      responses:
+        '200':
+          description: List of account ID strings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
 
   /api/newrelic/sync:
     post:
@@ -468,7 +510,7 @@ paths:
           schema:
             type: string
           example: web-prod
-        - name: osVersion
+        - name: osVersions
           in: query
           description: Filter by one or more OS version values. Use values returned by `GET /api/cmdb/os-versions`. Supports multi-select.
           required: false
@@ -479,9 +521,9 @@ paths:
             items:
               type: string
             example: ["8.7", "9.0"]
-        - name: operationalStatus
+        - name: opStatuses
           in: query
-          description: Filter by one or more operational status values. Use values returned by `GET /api/cmdb/op-statuses`. Supports multi-select.
+          description: Filter by one or more operational status values. Use values returned by `GET /api/cmdb/operational-statuses`. Supports multi-select.
           required: false
           style: form
           explode: true
@@ -525,39 +567,15 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /api/cmdb/op-statuses:
+  /api/cmdb/operational-statuses:
     get:
       tags: [CMDB]
       summary: List distinct operational statuses
-      description: Returns a sorted, deduplicated list of all `operational_status` values present in the cmdb table. Used to populate the Op Status multi-select filter on the CMDB list screen.
+      description: Returns a sorted, deduplicated list of all `operational_status` values present in the cmdb table. Used to populate the Operational Status multi-select filter on the CMDB list screen.
       operationId: listCmdbOpStatuses
       responses:
         '200':
           description: Sorted list of distinct operational status strings
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: string
-                example: [operational, non-operational, retired]
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
-  /api/cmdb/operational-statuses:
-    get:
-      tags: [CMDB]
-      summary: List distinct operational statuses (deprecated — use /api/cmdb/op-statuses)
-      description: |
-        Deprecated. Returns a list of all distinct operational status values present in the CMDB table.
-        Use `GET /api/cmdb/op-statuses` instead.
-      operationId: listCmdbOperationalStatuses
-      deprecated: true
-      responses:
-        '200':
-          description: List of distinct operational status values
           content:
             application/json:
               schema:
@@ -637,12 +655,21 @@ paths:
   # ------------------------------------------------------------
   # Credentials
   # ------------------------------------------------------------
-  /api/credentials:
+  /api/settings/credentials:
     get:
       tags: [Credentials]
       summary: List all credentials
-      description: Returns all credential entries. Passwords and API keys are masked in the response.
+      description: Returns credential metadata for all entries filtered by service. The `config` field is never decrypted or returned on list — no secrets travel over the wire.
       operationId: listCredentials
+      parameters:
+        - name: service
+          in: query
+          required: true
+          description: Filter credentials by service type
+          schema:
+            type: string
+            enum: [vsphere, newrelic, cmdb]
+          example: vsphere
       responses:
         '200':
           description: List of credentials
@@ -714,7 +741,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /api/credentials/{id}:
+  /api/settings/credentials/{id}:
     parameters:
       - $ref: '#/components/parameters/IdParam'
 
@@ -779,7 +806,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /api/credentials/{id}/enable:
+  /api/settings/credentials/{id}/enable:
     parameters:
       - $ref: '#/components/parameters/IdParam'
     patch:
@@ -800,7 +827,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /api/credentials/{id}/disable:
+  /api/settings/credentials/{id}/disable:
     parameters:
       - $ref: '#/components/parameters/IdParam'
     patch:
@@ -824,7 +851,7 @@ paths:
   # ------------------------------------------------------------
   # Sync Schedule
   # ------------------------------------------------------------
-  /api/schedule:
+  /api/settings/schedule:
     get:
       tags: [Schedule]
       summary: List all sync schedules
@@ -843,7 +870,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /api/schedule/{service}:
+  /api/settings/schedule/{service}:
     parameters:
       - $ref: '#/components/parameters/ServiceParam'
 
@@ -876,7 +903,7 @@ paths:
             schema:
               $ref: '#/components/schemas/UpdateScheduleRequest'
             example:
-              cron_expr: "0 0 2 * * *"
+              cronExpr: "0 0 2 * * *"
               enabled: true
               description: Every day at 2:00 AM
       responses:
@@ -895,7 +922,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /api/schedule/{service}/enable:
+  /api/settings/schedule/{service}/enable:
     parameters:
       - $ref: '#/components/parameters/ServiceParam'
     patch:
@@ -916,7 +943,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /api/schedule/{service}/disable:
+  /api/settings/schedule/{service}/disable:
     parameters:
       - $ref: '#/components/parameters/ServiceParam'
     patch:
@@ -936,6 +963,109 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
+
+  # ------------------------------------------------------------
+  # Reports
+  # ------------------------------------------------------------
+  /api/reports/missing-from-cmdb:
+    get:
+      tags: [Reports]
+      summary: Hosts missing from CMDB
+      description: Returns hosts found in vSphere or New Relic that have no matching CMDB record.
+      operationId: missingFromCmdb
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by hostname (case-insensitive substring)
+        - name: powerState
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [poweredOn, poweredOff, suspended]
+          description: Filter by power state
+        - name: sources
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [vsphere, newrelic]
+          description: Filter by source system
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 25
+      responses:
+        '200':
+          description: Paged list of inventory records missing from CMDB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedInventoryResponse'
+
+  /api/reports/missing-from-cmdb/count:
+    get:
+      tags: [Reports]
+      summary: Count of hosts missing from CMDB
+      operationId: missingFromCmdbCount
+      responses:
+        '200':
+          description: Count of hosts missing from CMDB
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                    format: int64
+
+  /api/reports/ip-discrepancy:
+    get:
+      tags: [Reports]
+      summary: IP address discrepancies
+      description: |
+        For each host in CMDB that has vSphere or New Relic IP data, iterates each source IPv4
+        address and reports hosts where at least one source IP is absent from the CMDB IP list.
+        IPv6 addresses are excluded. Hosts where all source IPs are already in CMDB are not reported.
+      operationId: ipDiscrepancy
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by hostname (case-insensitive substring)
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 25
+      responses:
+        '200':
+          description: Paged list of IP discrepancy entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedIpDiscrepancyResponse'
 
 
 # ==============================================================
@@ -1187,62 +1317,62 @@ components:
         hostname:
           type: string
           example: web-prod-01
-        vm_name:
+        vmName:
           type: string
           example: web-prod-01
-        cpu_count:
+        cpuCount:
           type: integer
           nullable: true
           example: 4
-        cpu_cores:
+        cpuCores:
           type: integer
           nullable: true
           example: 2
-        memory_mb:
+        memoryMb:
           type: integer
           nullable: true
           example: 8192
-        memory_gb:
+        memoryGb:
           type: integer
           nullable: true
           example: 8
-        power_state:
+        powerState:
           type: string
           enum: [poweredOn, poweredOff, suspended]
           nullable: true
           example: poweredOn
-        guest_os:
+        guestOs:
           type: string
           nullable: true
           example: "Ubuntu Linux (64-bit)"
-        tools_status:
+        toolsStatus:
           type: string
           enum: [toolsOk, toolsOld, toolsNotRunning, toolsNotInstalled]
           nullable: true
           example: toolsOk
-        ipv4_address:
+        ipv4Address:
           type: string
           nullable: true
           example: 10.0.1.50
-        ipv6_address:
+        ipv6Address:
           type: string
           nullable: true
           example: null
-        source_url:
+        sourceUrl:
           type: string
           nullable: true
           description: vCenter hostname this record was synced from
           example: vcenter.corp.example.com
-        last_synced_at:
+        lastSyncedAt:
           type: string
           format: date-time
           nullable: true
           example: "2026-03-01T02:05:00Z"
-        created_at:
+        createdAt:
           type: string
           format: date-time
           example: "2026-02-01T10:00:00Z"
-        updated_at:
+        updatedAt:
           type: string
           format: date-time
           example: "2026-03-01T02:05:00Z"
@@ -1254,31 +1384,31 @@ components:
         hostname:
           type: string
           example: web-prod-01
-        full_hostname:
+        fullHostname:
           type: string
           nullable: true
           example: web-prod-01.corp.example.com
-        ipv4_address:
+        ipv4Address:
           type: string
           nullable: true
           example: 10.0.1.50
-        ipv6_address:
+        ipv6Address:
           type: string
           nullable: true
           example: null
-        processor_count:
+        processorCount:
           type: integer
           nullable: true
           example: 4
-        core_count:
+        coreCount:
           type: integer
           nullable: true
           example: 2
-        system_memory_bytes:
+        systemMemoryBytes:
           type: integer
           nullable: true
           example: 8589934592
-        linux_distribution:
+        linuxDistribution:
           type: string
           nullable: true
           example: "Ubuntu 22.04"
@@ -1298,15 +1428,15 @@ components:
           type: string
           nullable: true
           example: dc1
-        account_id:
+        accountId:
           type: string
           nullable: true
           example: "12345"
-        created_at:
+        createdAt:
           type: string
           format: date-time
           example: "2026-02-01T10:00:00Z"
-        updated_at:
+        updatedAt:
           type: string
           format: date-time
           example: "2026-03-02T06:10:00Z"
@@ -1345,10 +1475,10 @@ components:
         size:
           type: integer
           example: 20
-        total_elements:
+        totalElements:
           type: integer
           example: 95
-        total_pages:
+        totalPages:
           type: integer
           example: 5
 
@@ -1365,10 +1495,10 @@ components:
         size:
           type: integer
           example: 20
-        total_elements:
+        totalElements:
           type: integer
           example: 88
-        total_pages:
+        totalPages:
           type: integer
           example: 5
 
@@ -1379,7 +1509,7 @@ components:
         hostname:
           type: string
           example: web-prod-01
-        sys_id:
+        sysId:
           type: string
           nullable: true
           example: abc123def456
@@ -1387,11 +1517,11 @@ components:
           type: string
           nullable: true
           example: "Red Hat Enterprise Linux"
-        os_version:
+        osVersion:
           type: string
           nullable: true
           example: "8.7"
-        ip_address:
+        ipAddress:
           type: string
           nullable: true
           example: 10.0.1.50
@@ -1407,7 +1537,7 @@ components:
           type: string
           nullable: true
           example: production
-        operational_status:
+        operationalStatus:
           type: string
           nullable: true
           example: operational
@@ -1415,16 +1545,16 @@ components:
           type: string
           nullable: true
           example: server
-        last_synced_at:
+        lastSyncedAt:
           type: string
           format: date-time
           nullable: true
           example: "2026-03-07T04:00:00Z"
-        created_at:
+        createdAt:
           type: string
           format: date-time
           example: "2026-02-01T10:00:00Z"
-        updated_at:
+        updatedAt:
           type: string
           format: date-time
           example: "2026-03-07T04:00:00Z"
@@ -1442,10 +1572,10 @@ components:
         size:
           type: integer
           example: 20
-        total_elements:
+        totalElements:
           type: integer
           example: 210
-        total_pages:
+        totalPages:
           type: integer
           example: 11
 
@@ -1472,11 +1602,11 @@ components:
         enabled:
           type: boolean
           example: true
-        created_at:
+        createdAt:
           type: string
           format: date-time
           example: "2026-02-01T10:00:00Z"
-        updated_at:
+        updatedAt:
           type: string
           format: date-time
           example: "2026-02-01T10:00:00Z"
@@ -1542,23 +1672,31 @@ components:
           type: string
           example: Name|AccountId
         config:
-          description: Plain-text config — encrypted with AES-256 before storage.
-          oneOf:
-            - $ref: '#/components/schemas/VsphereConfig'
-            - $ref: '#/components/schemas/NewRelicConfig'
-            - $ref: '#/components/schemas/CmdbConfig'
+          type: string
+          description: |
+            JSON string of the credential config, serialized by the client before sending.
+            Encrypted with AES-256-GCM before storage. When parsed, the structure is
+            service-specific (see VsphereConfig, NewRelicConfig, CmdbConfig schemas).
+          example: '{"host":"vcenter.corp.example.com","username":"admin@vsphere.local","password":"secret"}'
 
     UpdateCredentialRequest:
       type: object
+      required: [service, name, config]
       properties:
+        service:
+          type: string
+          enum: [vsphere, newrelic, cmdb]
+          example: vsphere
         name:
           type: string
           example: Name|AccountId
         config:
-          oneOf:
-            - $ref: '#/components/schemas/VsphereConfig'
-            - $ref: '#/components/schemas/NewRelicConfig'
-            - $ref: '#/components/schemas/CmdbConfig'
+          type: string
+          description: |
+            JSON string of the credential config, serialized by the client before sending.
+            Encrypted with AES-256-GCM before storage. When parsed, the structure is
+            service-specific (see VsphereConfig, NewRelicConfig, CmdbConfig schemas).
+          example: '{"host":"vcenter.corp.example.com","username":"admin@vsphere.local","password":"secret"}'
 
     VsphereConfig:
       type: object
@@ -1619,7 +1757,7 @@ components:
           type: string
           enum: [vsphere, newrelic, cmdb]
           example: vsphere
-        cron_expr:
+        cronExpr:
           type: string
           description: "6-field cron: seconds minutes hours day-of-month month day-of-week"
           example: "0 0 2 * * *"
@@ -1630,21 +1768,21 @@ components:
           type: string
           nullable: true
           example: Every day at 2:00 AM
-        last_run_at:
+        lastRunAt:
           type: string
           format: date-time
           nullable: true
           example: "2026-03-02T02:00:05Z"
-        updated_at:
+        updatedAt:
           type: string
           format: date-time
           example: "2026-02-01T10:00:00Z"
 
     UpdateScheduleRequest:
       type: object
-      required: [cron_expr]
+      required: [cronExpr]
       properties:
-        cron_expr:
+        cronExpr:
           type: string
           description: "6-field cron: seconds minutes hours day-of-month month day-of-week"
           example: "0 0 2 * * *"
@@ -1667,31 +1805,21 @@ components:
           type: string
           enum: [idle, running, success, failed]
           example: success
-        last_run_at:
+        lastRunAt:
           type: string
           format: date-time
           nullable: true
           example: "2026-03-02T02:05:00Z"
-        records_synced:
-          type: integer
-          nullable: true
-          example: 87
-        message:
+        lastError:
           type: string
           nullable: true
           description: Error detail when status is `failed`
           example: null
 
     SyncAccepted:
-      type: object
-      properties:
-        service:
-          type: string
-          enum: [vsphere, newrelic, cmdb]
-          example: vsphere
-        message:
-          type: string
-          example: Sync job started
+      description: Returned immediately when a sync is triggered (HTTP 202). The sync runs asynchronously; poll GET /sync/status for updates.
+      allOf:
+        - $ref: '#/components/schemas/SyncStatus'
 
     # -- Error --
     ErrorResponse:
@@ -1710,9 +1838,76 @@ components:
           type: string
           format: date-time
           example: "2026-03-02T10:00:00Z"
-        path:
+
+    PagedInventoryResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/InventoryResponse'
+        page:
+          type: integer
+        size:
+          type: integer
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+
+    PagedIpDiscrepancyResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/IpDiscrepancyEntry'
+        page:
+          type: integer
+        size:
+          type: integer
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+
+    IpDiscrepancyEntry:
+      type: object
+      properties:
+        hostname:
           type: string
-          example: /api/inventory/web-prod-01
+        vsphereIps:
+          type: array
+          items:
+            type: string
+          description: Sorted IPv4 addresses from vSphere
+        nrIps:
+          type: array
+          items:
+            type: string
+          description: Sorted IPv4 addresses from New Relic
+        cmdbIps:
+          type: array
+          items:
+            type: string
+          description: Sorted IPv4 addresses from CMDB
+        notInCmdb:
+          type: array
+          items:
+            type: string
+          description: Source IPs not found in CMDB IP list
+        sources:
+          type: string
+          description: Comma-separated source systems (vsphere, newrelic, cmdb)
+        discrepancyType:
+          type: string
+          enum: [IP mismatch, CMDB has no IP]
+        powerState:
+          type: string
+        guestOs:
+          type: string
 
   # ------------------------------------------------------------
   # Reusable responses

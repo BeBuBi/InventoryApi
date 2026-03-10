@@ -42,6 +42,16 @@ export const routes: Routes = [
       import('./features/settings/schedule/schedule.component').then(m => m.ScheduleComponent)
   },
   {
+    path: 'reports/missing-from-cmdb',
+    loadComponent: () =>
+      import('./features/reports/missing-from-cmdb.component').then(m => m.MissingFromCmdbComponent)
+  },
+  {
+    path: 'reports/ip-discrepancy',
+    loadComponent: () =>
+      import('./features/reports/ip-discrepancy.component').then(m => m.IpDiscrepancyComponent)
+  },
+  {
     path: '**',
     redirectTo: 'dashboard'
   }

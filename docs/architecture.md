@@ -1,9 +1,9 @@
 # Architecture Overview
 ## Server Inventory System
 
-**Version:** 1.4
+**Version:** 1.5
 **Author:** Solo Developer
-**Last Updated:** 2026-03-09
+**Last Updated:** 2026-03-10
 **Status:** Draft
 
 ---
@@ -66,7 +66,8 @@ The backend service handles all responsibilities in one place — inventory mana
                         │  VsphereController                   │
                         │  NewRelicController                  │
                         │  CmdbController                      │
-                        │  CredentialsController               │
+                        │  CredentialController                │
+                        │  ReportController                    │
                         │  ScheduleController                  │
                         │  ─────────────────────────────────  │
                         │  VsphereSyncJob (scheduled)          │
@@ -113,7 +114,7 @@ The backend service handles all responsibilities in one place — inventory mana
 - Sync asset data from ServiceNow CMDB on a configurable schedule (OAuth2 password grant)
 - Manage credentials for vSphere, New Relic, and CMDB (create, update, enable, disable, delete)
 - Manage sync schedules for vSphere, New Relic, and CMDB (save, update, enable, disable)
-- Enforce authentication (JWT)
+- Enforce authentication (JWT) — **planned, not yet enforced**; currently `permitAll()`
 - Handle CORS for the Angular frontend
 
 **Key Endpoints:**
@@ -124,39 +125,45 @@ GET    /api/inventory/{hostname}         Get full flat asset detail (from invent
 
 GET    /api/dashboard/assets             Paginated search over inventory VIEW (search, page, size)
 
-GET    /api/vsphere                      List all vSphere records (paginated; filters: search, sourceUrl[], powerState[], guestOs[])
+GET    /api/vsphere                      List all vSphere records (paginated; filters: search, sourceUrls[], powerStates[], guestOsTypes[])
 GET    /api/vsphere/vcenter-urls         List distinct source_url values (multi-select filter population)
 GET    /api/vsphere/guest-os-types       List distinct guest_os values (multi-select filter population)
 GET    /api/vsphere/{hostname}           Get vSphere record by hostname
 POST   /api/vsphere/sync                 Trigger manual vSphere sync
 GET    /api/vsphere/sync/status          Get last vSphere sync status and timestamp
 
-GET    /api/newrelic                     List all New Relic records (paginated; filters: search, accountId[], linuxDistro[])
+GET    /api/newrelic                     List all New Relic records (paginated; filters: search, service, environment, accountIds[], linuxDistros[])
+GET    /api/newrelic/environments        List distinct environment values (multi-select filter population)
+GET    /api/newrelic/accounts            List distinct account_id values (multi-select filter population)
 GET    /api/newrelic/linux-distros       List distinct linux_distribution values (multi-select filter population)
 GET    /api/newrelic/{hostname}          Get New Relic record by hostname
 POST   /api/newrelic/sync                Trigger manual New Relic sync
 GET    /api/newrelic/sync/status         Get last New Relic sync status and timestamp
 
-GET    /api/cmdb                         List all CMDB records (paginated; filters: search, osVersion[], operationalStatus[])
+GET    /api/cmdb                         List all CMDB records (paginated; filters: search, opStatuses[], osVersions[])
 GET    /api/cmdb/os-versions             List distinct os_version values (multi-select filter population)
-GET    /api/cmdb/op-statuses             List distinct operational_status values (multi-select filter population)
+GET    /api/cmdb/operational-statuses     List distinct operational_status values (multi-select filter population)
 GET    /api/cmdb/{hostname}              Get CMDB record by hostname
 POST   /api/cmdb/sync                    Trigger manual CMDB sync
 GET    /api/cmdb/sync/status             Get last CMDB sync status and timestamp
 
-GET    /api/credentials                  List all credentials (passwords masked)
-GET    /api/credentials/{id}             Get credential by ID (password masked)
-POST   /api/credentials                  Create new credential entry
-PUT    /api/credentials/{id}             Update credential entry
-PATCH  /api/credentials/{id}/enable      Enable a credential
-PATCH  /api/credentials/{id}/disable     Disable a credential
-DELETE /api/credentials/{id}             Delete a credential
+GET    /api/settings/credentials                  List all credentials (config never returned)
+GET    /api/settings/credentials/{id}             Get credential by ID (sensitive fields masked)
+POST   /api/settings/credentials                  Create new credential entry
+PUT    /api/settings/credentials/{id}             Update credential entry
+PATCH  /api/settings/credentials/{id}/enable      Enable a credential
+PATCH  /api/settings/credentials/{id}/disable     Disable a credential
+DELETE /api/settings/credentials/{id}             Delete a credential
 
-GET    /api/schedule                     List all sync schedules
-GET    /api/schedule/{service}           Get schedule for a service
-PUT    /api/schedule/{service}           Save or update schedule for a service
-PATCH  /api/schedule/{service}/enable    Enable schedule for a service
-PATCH  /api/schedule/{service}/disable   Pause schedule for a service
+GET    /api/settings/schedule                     List all sync schedules
+GET    /api/settings/schedule/{service}           Get schedule for a service
+PUT    /api/settings/schedule/{service}           Save or update schedule for a service
+PATCH  /api/settings/schedule/{service}/enable    Enable schedule for a service
+PATCH  /api/settings/schedule/{service}/disable   Pause schedule for a service
+
+GET    /api/reports/missing-from-cmdb             Hosts in vSphere/NR but not in CMDB (filters: search, powerState, sources, page, size)
+GET    /api/reports/missing-from-cmdb/count       Count of hosts missing from CMDB
+GET    /api/reports/ip-discrepancy                Hosts with source IPs not found in CMDB IP list (filters: search, page, size)
 ```
 
 **Unified Search Query Example:**
@@ -240,7 +247,8 @@ com.cox.inventorysystem
 │   ├── VsphereController.java
 │   ├── NewRelicController.java
 │   ├── CmdbController.java
-│   ├── CredentialsController.java
+│   ├── CredentialController.java
+│   ├── ReportController.java
 │   └── ScheduleController.java
 ├── service
 │   ├── InventoryService.java
@@ -249,7 +257,7 @@ com.cox.inventorysystem
 │   ├── VsphereService.java
 │   ├── NewRelicService.java
 │   ├── CmdbService.java
-│   ├── CredentialsService.java
+│   ├── CredentialService.java
 │   ├── ScheduleService.java
 │   ├── SyncStatusService.java
 │   └── EncryptionService.java
@@ -263,7 +271,7 @@ com.cox.inventorysystem
 │   ├── NewRelicRepository.java
 │   ├── CmdbRepository.java
 │   ├── CredentialRepository.java
-│   └── SyncScheduleRepository.java
+│   └── ScheduleRepository.java
 ├── model
 │   ├── Inventory.java
 │   ├── Vsphere.java
@@ -280,13 +288,20 @@ com.cox.inventorysystem
 │   ├── CmdbResponse.java
 │   ├── CredentialRequest.java
 │   ├── CredentialResponse.java
-│   └── SyncStatusResponse.java
+│   ├── IpDiscrepancyResponse.java
+│   ├── SyncScheduleRequest.java
+│   ├── SyncScheduleResponse.java
+│   ├── SyncStatusResponse.java
+│   └── ErrorResponse.java
 ├── client
 │   ├── VsphereApiClient.java
 │   ├── NewRelicApiClient.java
 │   └── CmdbApiClient.java
 └── exception
-    └── GlobalExceptionHandler.java
+    ├── GlobalExceptionHandler.java
+    ├── ResourceNotFoundException.java
+    ├── ResourceAlreadyExistsException.java
+    └── SyncAlreadyRunningException.java
 ```
 
 ---
@@ -316,21 +331,28 @@ All list screens (Dashboard, vSphere, New Relic, CMDB) use inline column header 
 |--------|-----------------------|
 | Dashboard | Hostname (text, debounced) |
 | vSphere | Hostname (text), vCenter URL (multi-select), Power State (multi-select), Guest OS (multi-select) |
-| New Relic | Hostname (text), Account ID (multi-select), Linux Distro (multi-select) |
+| New Relic | Hostname (text), Service (text), Environment (text), Account ID (multi-select), Linux Distro (multi-select) |
+| Missing from CMDB | Hostname (text), Sources (multi-select), Power State (multi-select) |
+| IP Discrepancy | Hostname (text) |
 | CMDB | Hostname (text), OS Version (multi-select), Op Status (multi-select) |
 
 **Shared Components (`frontend/src/app/shared/components/`):**
 - `multi-select/multi-select.component.ts` — Standalone Angular component; accepts `options: string[]`, optional `labelFn`, emits `selectionChange: string[]`; renders a checkbox panel with Select All / Clear All and closes on outside click
 
+**CSV Export:**
+Both report pages (Missing from CMDB and IP Discrepancy) include an "Export CSV" button. CSV export is implemented entirely in the frontend — it re-requests the same API endpoint with `size=10000` and `page=0`, respecting all currently active filters, so it exports all matching records (up to 10,000), not just the current page. No dedicated CSV export backend endpoint exists.
+
 **Key Routes:**
 ```
-/                          Dashboard (summary metrics + inventory table)
-/inventory/:hostname       Asset detail page
-/vsphere                   vSphere data view
-/newrelic                  New Relic data view
-/cmdb                      CMDB (ServiceNow) data view
-/settings/credentials      Credentials management page (vSphere, New Relic, CMDB)
-/settings/schedule         Sync schedule management (day + time picker per service)
+/                             Dashboard (summary metrics + inventory table)
+/inventory/:hostname          Asset detail page
+/vsphere                      vSphere data view
+/newrelic                     New Relic data view
+/cmdb                         CMDB (ServiceNow) data view
+/reports/missing-from-cmdb    Hosts in vSphere/NR but not in CMDB
+/reports/ip-discrepancy       Hosts with IP address discrepancies vs CMDB
+/settings/credentials         Credentials management page (vSphere, New Relic, CMDB)
+/settings/schedule            Sync schedule management (day + time picker per service)
 ```
 
 **Environment Configuration (`src/environments/environment.prod.ts`):**
@@ -391,7 +413,7 @@ export const environment = {
 ```
 1. Admin opens /settings/schedule in Angular UI
 2. Admin selects service (vsphere, newrelic, or cmdb), day(s), and time
-3. Angular calls PUT /api/schedule/{service} to Backend Service
+3. Angular calls PUT /api/settings/schedule/{service} to Backend Service
 4. Backend Service converts selection to cron expression
 5. Cron expression saved to sync_schedule table in data/inventory.db
 6. Sync job picks up new schedule on its next 1-minute poll
@@ -527,10 +549,9 @@ WAL mode is recommended to improve read concurrency between the REST API threads
 PRAGMA journal_mode=WAL;
 ```
 
-Configure in `application.properties`:
+Configured via JDBC URL parameters in `application.properties`:
 ```properties
-spring.datasource.url=jdbc:sqlite:/data/inventory.db
-spring.datasource.hikari.connection-init-sql=PRAGMA journal_mode=WAL;
+spring.datasource.url=jdbc:sqlite:${DB_PATH:./data/inventory.db}?journal_mode=WAL&busy_timeout=5000
 ```
 
 See `@docs/database-schema.md` for full DDL and column definitions.
@@ -543,20 +564,20 @@ See `@docs/database-schema.md` for full DDL and column definitions.
 - All responses are JSON
 - All list endpoints support pagination: `?page=0&size=20`
 - All list endpoints support filtering: `?environment=production&status=active`
-- HTTP status codes: `200`, `201`, `204`, `400`, `401`, `404`, `500`
+- HTTP status codes: `200`, `201`, `204`, `400`, `404`, `409`, `500`
+- **Authentication is not currently enforced** — Spring Security is configured with `permitAll()` for all routes; 401 is never returned
 - Error response format:
 
 ```json
 {
-  "timestamp": "2026-02-27T10:00:00Z",
   "status": 404,
   "error": "Not Found",
   "message": "Asset with hostname 'web-01' not found",
-  "path": "/api/inventory/web-01"
+  "timestamp": "2026-02-27T10:00:00Z"
 }
 ```
 
-See `@docs/api-spec.yaml` for full OpenAPI specification.
+See `docs/openapi.yaml` for full OpenAPI specification.
 
 ---
 
@@ -629,7 +650,7 @@ env:
 2. Admin creates a new credential entry (e.g. "Name|AccountId")
 3. Admin enters service type, name, host/username/password or API key
 4. Admin sets enabled = true or false
-5. Angular calls POST /api/credentials to Backend Service
+5. Angular calls POST /api/settings/credentials to Backend Service
 6. Backend Service encrypts the config JSON using AES-256 + ENCRYPTION_KEY
 7. Encrypted credential is saved to credentials table in data/inventory.db
 8. At next sync, Backend Service queries WHERE service = 'vsphere' AND enabled = 1
@@ -654,7 +675,7 @@ Two Docker images are built — one for the backend, one for the frontend.
 | Authentication | JWT (JJWT 0.12) — **planned, not yet enforced**; Spring Security currently uses `permitAll()` |
 | vSphere, New Relic & CMDB credentials | Stored encrypted (AES-256) in database, editable via UI |
 | Encryption key | AES key stored as Kubernetes Secret, injected as env variable |
-| Credential masking | `GET /api/credentials` list endpoint returns metadata only — `config` is never decrypted or sent over the wire; individual `GET /api/credentials/{id}` also returns only metadata |
+| Credential masking | `GET /api/settings/credentials` list endpoint returns metadata only — `config` is never decrypted on list; `GET /api/settings/credentials/{id}` decrypts and returns config with sensitive fields (`password`, `apiKey`, `client_secret`) masked as `"********"` |
 | HTTPS | TLS terminated at Backend Service (LoadBalancer) |
 | CORS | Configured in Backend Service to allow Angular frontend origin only |
 | No internal traffic | Single service — no inter-service communication needed |
@@ -670,7 +691,7 @@ Two Docker images are built — one for the backend, one for the frontend.
 | Database | SQLite | 3.x |
 | ORM | Hibernate + SQLite Dialect | 6.x |
 | Build Tool | Gradle | 8.x |
-| Java | Eclipse Temurin | 21 (LTS) |
+| Java | Eclipse Temurin | 17 (LTS) |
 | Logging | Logback (rolling file, `logs/`, 30-day retention) | (Spring Boot default) |
 | Containerization | Docker | latest |
 | Orchestration | Kubernetes | 1.29+ |

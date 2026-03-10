@@ -29,14 +29,14 @@ WORKDIR /app
 RUN apk add --no-cache sqlite
 
 # Create non-root user
-RUN addgroup -S sis && adduser -S sis -G sis
+RUN addgroup -S coxapp && adduser -S coxapp -G coxapp
 
 # Create data and logs directories owned by app user
-RUN mkdir -p data logs && chown -R sis:sis /app
+RUN mkdir -p data logs && chown -R coxapp:coxapp /app
 
-COPY --from=builder --chown=sis:sis /app/build/libs/*.jar app.jar
+COPY --from=builder --chown=coxapp:coxapp /app/build/libs/*.jar app.jar
 
-USER sis
+USER coxapp
 
 # DB stored in /app/data (mount a volume here in production)
 ENV DB_PATH=/app/data/inventory.db

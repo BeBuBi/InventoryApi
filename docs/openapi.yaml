@@ -971,7 +971,9 @@ paths:
     get:
       tags: [Reports]
       summary: Hosts missing from CMDB
-      description: Returns hosts found in vSphere or New Relic that have no matching CMDB record.
+      description: |
+        Returns hosts found in vSphere or New Relic that have no matching CMDB record.
+        Only hosts where at least one of vSphere IPv4 or New Relic IPv4 is non-empty are returned.
       operationId: missingFromCmdb
       parameters:
         - name: search
@@ -980,20 +982,6 @@ paths:
           schema:
             type: string
           description: Filter by hostname (case-insensitive substring)
-        - name: powerState
-          in: query
-          required: false
-          schema:
-            type: string
-            enum: [poweredOn, poweredOff, suspended]
-          description: Filter by power state
-        - name: sources
-          in: query
-          required: false
-          schema:
-            type: string
-            enum: [vsphere, newrelic]
-          description: Filter by source system
         - name: page
           in: query
           required: false

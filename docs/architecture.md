@@ -161,7 +161,7 @@ PUT    /api/settings/schedule/{service}           Save or update schedule for a 
 PATCH  /api/settings/schedule/{service}/enable    Enable schedule for a service
 PATCH  /api/settings/schedule/{service}/disable   Pause schedule for a service
 
-GET    /api/reports/missing-from-cmdb             Hosts in vSphere/NR but not in CMDB (filters: search, powerState, sources, page, size)
+GET    /api/reports/missing-from-cmdb             Hosts in vSphere/NR but not in CMDB with at least one valid IP (filters: search, page, size)
 GET    /api/reports/missing-from-cmdb/count       Count of hosts missing from CMDB
 GET    /api/reports/ip-discrepancy                Hosts with source IPs not found in CMDB IP list (filters: search, page, size)
 ```

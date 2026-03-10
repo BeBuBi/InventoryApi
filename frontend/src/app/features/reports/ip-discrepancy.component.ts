@@ -144,20 +144,25 @@ export interface IpDiscrepancyEntry {
         </table>
 
         <!-- Pagination -->
-        <div *ngIf="totalPages > 1" class="px-4 py-3 border-t border-gray-100 flex items-center justify-between text-sm text-gray-600">
-          <span>{{ pageStart }}–{{ pageEnd }} of {{ totalCount | number }}</span>
+        <div class="px-4 py-3 border-t border-gray-200 flex items-center justify-between text-sm text-gray-600">
           <div class="flex items-center gap-2">
-            <button (click)="goToPage(currentPage - 1)" [disabled]="currentPage === 0"
-                    class="px-2 py-1 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">&lsaquo; Prev</button>
-            <span>Page {{ currentPage + 1 }} / {{ totalPages }}</span>
-            <button (click)="goToPage(currentPage + 1)" [disabled]="currentPage >= totalPages - 1"
-                    class="px-2 py-1 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">Next &rsaquo;</button>
+            <span class="text-gray-500">Rows:</span>
+            <select [(ngModel)]="pageSize" (ngModelChange)="onPageSizeChange()"
+                    class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none">
+              <option [ngValue]="25">25</option>
+              <option [ngValue]="50">50</option>
+              <option [ngValue]="100">100</option>
+            </select>
+            <span class="text-gray-400">&middot;</span>
+            <span>{{ totalCount }} records</span>
           </div>
-          <select [(ngModel)]="pageSize" (ngModelChange)="onPageSizeChange()" class="text-sm border border-gray-300 rounded px-2 py-1">
-            <option [value]="25">25 / page</option>
-            <option [value]="50">50 / page</option>
-            <option [value]="100">100 / page</option>
-          </select>
+          <div class="flex gap-2">
+            <button (click)="goToPage(currentPage - 1)" [disabled]="currentPage === 0"
+                    class="px-3 py-1 border rounded disabled:opacity-40 hover:bg-gray-50">Prev</button>
+            <span class="px-3 py-1">Page {{ currentPage + 1 }} of {{ totalPages }}</span>
+            <button (click)="goToPage(currentPage + 1)" [disabled]="currentPage >= totalPages - 1"
+                    class="px-3 py-1 border rounded disabled:opacity-40 hover:bg-gray-50">Next</button>
+          </div>
         </div>
       </div>
     </div>
@@ -176,9 +181,6 @@ export class IpDiscrepancyComponent implements OnInit {
   currentPage = 0;
   pageSize = 25;
   searchQuery = '';
-
-  get pageStart() { return this.currentPage * this.pageSize + 1; }
-  get pageEnd()   { return Math.min((this.currentPage + 1) * this.pageSize, this.totalCount); }
 
   ngOnInit(): void {
     this.search$.pipe(

@@ -7,12 +7,11 @@ import { debounceTime, distinctUntilChanged, Subject, switchMap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { Inventory } from '../../core/models/inventory.model';
 import { PagedResponse } from '../../core/models/paged-response.model';
-import { MultiSelectComponent } from '../../shared/components/multi-select/multi-select.component';
 
 @Component({
   selector: 'app-missing-from-cmdb',
   standalone: true,
-  imports: [CommonModule, RouterLink, FormsModule, MultiSelectComponent],
+  imports: [CommonModule, RouterLink, FormsModule],
   template: `
     <div class="p-6">
       <!-- Header -->
@@ -61,26 +60,8 @@ import { MultiSelectComponent } from '../../shared/components/multi-select/multi
               </th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">vSphere IPv4</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">New Relic IPv4</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                <div>Sources</div>
-                <app-multi-select
-                  [options]="sourceOptions"
-                  [selected]="selectedSources"
-                  placeholder="All"
-                  (selectedChange)="onSourcesChange($event)"
-                  class="mt-1 block"
-                />
-              </th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                <div>Power State</div>
-                <app-multi-select
-                  [options]="powerStateOptions"
-                  [selected]="selectedPowerStates"
-                  placeholder="All"
-                  (selectedChange)="onPowerStateChange($event)"
-                  class="mt-1 block"
-                />
-              </th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sources</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Power State</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Guest OS</th>
             </tr>
           </thead>
@@ -132,24 +113,25 @@ import { MultiSelectComponent } from '../../shared/components/multi-select/multi
         </table>
 
         <!-- Pagination -->
-        <div *ngIf="totalPages > 1" class="px-4 py-3 border-t border-gray-100 flex items-center justify-between text-sm text-gray-600">
-          <span>{{ pageStart }}–{{ pageEnd }} of {{ totalCount | number }}</span>
+        <div class="px-4 py-3 border-t border-gray-200 flex items-center justify-between text-sm text-gray-600">
           <div class="flex items-center gap-2">
-            <button (click)="goToPage(currentPage - 1)" [disabled]="currentPage === 0"
-                    class="px-2 py-1 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
-              &lsaquo; Prev
-            </button>
-            <span>Page {{ currentPage + 1 }} / {{ totalPages }}</span>
-            <button (click)="goToPage(currentPage + 1)" [disabled]="currentPage >= totalPages - 1"
-                    class="px-2 py-1 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
-              Next &rsaquo;
-            </button>
+            <span class="text-gray-500">Rows:</span>
+            <select [(ngModel)]="pageSize" (ngModelChange)="onPageSizeChange()"
+                    class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none">
+              <option [ngValue]="25">25</option>
+              <option [ngValue]="50">50</option>
+              <option [ngValue]="100">100</option>
+            </select>
+            <span class="text-gray-400">&middot;</span>
+            <span>{{ totalCount }} records</span>
           </div>
-          <select [(ngModel)]="pageSize" (ngModelChange)="onPageSizeChange()" class="text-sm border border-gray-300 rounded px-2 py-1">
-            <option [value]="25">25 / page</option>
-            <option [value]="50">50 / page</option>
-            <option [value]="100">100 / page</option>
-          </select>
+          <div class="flex gap-2">
+            <button (click)="goToPage(currentPage - 1)" [disabled]="currentPage === 0"
+                    class="px-3 py-1 border rounded disabled:opacity-40 hover:bg-gray-50">Prev</button>
+            <span class="px-3 py-1">Page {{ currentPage + 1 }} of {{ totalPages }}</span>
+            <button (click)="goToPage(currentPage + 1)" [disabled]="currentPage >= totalPages - 1"
+                    class="px-3 py-1 border rounded disabled:opacity-40 hover:bg-gray-50">Next</button>
+          </div>
         </div>
       </div>
     </div>
@@ -168,14 +150,6 @@ export class MissingFromCmdbComponent implements OnInit {
   currentPage = 0;
   pageSize = 25;
   searchQuery = '';
-  selectedSources: string[] = [];
-  selectedPowerStates: string[] = [];
-
-  readonly sourceOptions = ['vsphere', 'newrelic'];
-  readonly powerStateOptions = ['poweredOn', 'poweredOff', 'suspended'];
-
-  get pageStart(): number { return this.currentPage * this.pageSize + 1; }
-  get pageEnd(): number { return Math.min((this.currentPage + 1) * this.pageSize, this.totalCount); }
 
   ngOnInit(): void {
     this.search$.pipe(
@@ -204,8 +178,6 @@ export class MissingFromCmdbComponent implements OnInit {
       .set('page', this.currentPage)
       .set('size', this.pageSize);
     if (this.searchQuery) params = params.set('search', this.searchQuery);
-    if (this.selectedPowerStates.length === 1) params = params.set('powerState', this.selectedPowerStates[0]);
-    if (this.selectedSources.length === 1) params = params.set('sources', this.selectedSources[0]);
     return this.http.get<PagedResponse<Inventory>>(
       `${environment.apiBaseUrl}/api/reports/missing-from-cmdb`, { params }
     );
@@ -218,18 +190,6 @@ export class MissingFromCmdbComponent implements OnInit {
   }
 
   onSearch(query: string): void { this.search$.next(query); }
-
-  onSourcesChange(values: string[]): void {
-    this.selectedSources = values;
-    this.currentPage = 0;
-    this.load();
-  }
-
-  onPowerStateChange(values: string[]): void {
-    this.selectedPowerStates = values;
-    this.currentPage = 0;
-    this.load();
-  }
 
   goToPage(page: number): void {
     this.currentPage = page;
@@ -263,8 +223,6 @@ export class MissingFromCmdbComponent implements OnInit {
   exportCsv(): void {
     let params = new HttpParams().set('page', 0).set('size', 10000);
     if (this.searchQuery) params = params.set('search', this.searchQuery);
-    if (this.selectedPowerStates.length === 1) params = params.set('powerState', this.selectedPowerStates[0]);
-    if (this.selectedSources.length === 1) params = params.set('sources', this.selectedSources[0]);
 
     this.http.get<PagedResponse<Inventory>>(
       `${environment.apiBaseUrl}/api/reports/missing-from-cmdb`, { params }

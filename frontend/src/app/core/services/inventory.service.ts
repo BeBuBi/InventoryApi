@@ -12,7 +12,6 @@ export class InventoryService {
 
   list(params: {
     search?: string;
-    environment?: string;
     operationalStatus?: string;
     sources?: string;
     page?: number;
@@ -20,7 +19,6 @@ export class InventoryService {
   }): Observable<PagedResponse<Inventory>> {
     let p = new HttpParams();
     if (params.search) p = p.set('search', params.search);
-    if (params.environment) p = p.set('environment', params.environment);
     if (params.operationalStatus) p = p.set('operationalStatus', params.operationalStatus);
     if (params.sources) p = p.set('sources', params.sources);
     p = p.set('page', params.page ?? 0);

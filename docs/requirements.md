@@ -127,7 +127,7 @@ The **Server Inventory System** is a backend application that consolidates serve
 | API-05 | The API shall support pagination via `page` and `size` query parameters | High |
 | API-06 | The API shall return appropriate HTTP status codes (200, 400, 404, 500) | High |
 | API-07 | The API shall include an OpenAPI (Swagger) specification | Medium |
-| API-08 | The API shall expose `GET /api/reports/missing-from-cmdb` (filters: search, powerState, sources, page, size; default size 25) | High |
+| API-08 | The API shall expose `GET /api/reports/missing-from-cmdb` (filters: search, page, size; default size 25; only returns hosts with at least one valid IPv4) | High |
 | API-09 | The API shall expose `GET /api/reports/missing-from-cmdb/count` returning the total count of hosts missing from CMDB | Medium |
 | API-10 | The API shall expose `GET /api/reports/ip-discrepancy` (filters: search, page, size; default size 25) | High |
 

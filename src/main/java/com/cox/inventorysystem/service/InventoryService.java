@@ -11,6 +11,9 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
+import java.util.Comparator;
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 public class InventoryService {
@@ -39,11 +42,9 @@ public class InventoryService {
                 .orElseThrow(() -> new ResourceNotFoundException("Inventory record not found: " + hostname)));
     }
 
-    public PagedResponse<InventoryResponse> listMissingFromCmdb(
-            String search, String powerState, String sources, int page, int size) {
+    public PagedResponse<InventoryResponse> listMissingFromCmdb(String search, int page, int size) {
         var pageable = PageRequest.of(page, size, Sort.by("hostname").ascending());
-        var results = inventoryRepository.findMissingFromCmdb(
-                nullIfBlank(search), nullIfBlank(powerState), nullIfBlank(sources), pageable);
+        var results = inventoryRepository.findMissingFromCmdb(nullIfBlank(search), pageable);
         return new PagedResponse<>(results.map(InventoryResponse::new));
     }
 
@@ -58,7 +59,7 @@ public class InventoryService {
         // 2. For each host, iterate source IPs and keep only those not found in CMDB
         var discrepancies = candidates.stream()
                 .filter(IpDiscrepancyResponse::isDiscrepancy)
-                .sorted(java.util.Comparator.comparingLong(i -> {
+                .sorted(Comparator.comparingLong(i -> {
                     var ips = IpDiscrepancyResponse.parseIpv4(i.getVsphereIpv4());
                     if (ips.isEmpty()) ips = IpDiscrepancyResponse.parseIpv4(i.getNrIpv4());
                     return ips.isEmpty() ? Long.MAX_VALUE : IpDiscrepancyResponse.ipToLong(ips.get(0));
@@ -70,8 +71,8 @@ public class InventoryService {
         long total = discrepancies.size();
         int from = page * size;
         int to = (int) Math.min((long) from + size, total);
-        java.util.List<IpDiscrepancyResponse> pageContent =
-                from >= total ? java.util.List.of() : discrepancies.subList(from, to);
+        List<IpDiscrepancyResponse> pageContent =
+                from >= total ? List.of() : discrepancies.subList(from, to);
         return new PagedResponse<>(pageContent, page, size, total);
     }
 

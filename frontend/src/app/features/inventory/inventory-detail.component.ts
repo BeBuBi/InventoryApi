@@ -194,7 +194,7 @@ import { Inventory } from '../../core/models/inventory.model';
                 <span *ngIf="item.operationalStatus"
                       [class]="opStatusClass(item.operationalStatus)"
                       class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium">
-                  {{ item.operationalStatus }}
+                  {{ opStatusLabel(item.operationalStatus) }}
                 </span>
                 <span *ngIf="!item.operationalStatus" class="font-medium">—</span>
               </dd>
@@ -255,11 +255,25 @@ export class InventoryDetailComponent implements OnInit {
     return 'bg-gray-100 text-gray-600';
   }
 
-  opStatusClass(status: string): string {
-    const s = status.toLowerCase();
-    if (s === 'operational' || s === 'in service') return 'bg-green-100 text-green-800';
-    if (s === 'maintenance') return 'bg-yellow-100 text-yellow-800';
-    if (s === 'decommissioned' || s === 'retired') return 'bg-gray-100 text-gray-500';
-    return 'bg-gray-100 text-gray-600';
+  opStatusLabel(status?: string): string {
+    switch (status) {
+      case '1': return 'Operational';
+      case '2': return 'Repair in Progress';
+      case '3': return 'Do Not Use';
+      case '6': return 'Retired';
+      case '7': return 'Stolen';
+      default:  return status ?? '—';
+    }
+  }
+
+  opStatusClass(status?: string): string {
+    switch (status) {
+      case '1': return 'bg-green-100 text-green-800';
+      case '2': return 'bg-yellow-100 text-yellow-800';
+      case '3': return 'bg-red-100 text-red-800';
+      case '6': return 'bg-gray-100 text-gray-600';
+      case '7': return 'bg-red-100 text-red-800';
+      default:  return 'bg-gray-100 text-gray-500';
+    }
   }
 }

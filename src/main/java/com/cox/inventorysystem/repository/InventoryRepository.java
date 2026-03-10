@@ -42,20 +42,18 @@ public interface InventoryRepository extends JpaRepository<Inventory, String> {
             SELECT i FROM Inventory i
             WHERE (i.sources LIKE '%vsphere%' OR i.sources LIKE '%newrelic%')
               AND i.sources NOT LIKE '%cmdb%'
+              AND ((i.vsphereIpv4 IS NOT NULL AND i.vsphereIpv4 <> '') OR (i.nrIpv4 IS NOT NULL AND i.nrIpv4 <> ''))
               AND (:search IS NULL OR LOWER(i.hostname) LIKE LOWER(CONCAT('%', :search, '%')))
-              AND (:powerState IS NULL OR i.powerState = :powerState)
-              AND (:sources IS NULL OR i.sources LIKE CONCAT('%', :sources, '%'))
             """)
     Page<Inventory> findMissingFromCmdb(
             @Param("search") String search,
-            @Param("powerState") String powerState,
-            @Param("sources") String sources,
             Pageable pageable);
 
     @Query("""
             SELECT COUNT(i) FROM Inventory i
             WHERE (i.sources LIKE '%vsphere%' OR i.sources LIKE '%newrelic%')
               AND i.sources NOT LIKE '%cmdb%'
+              AND ((i.vsphereIpv4 IS NOT NULL AND i.vsphereIpv4 <> '') OR (i.nrIpv4 IS NOT NULL AND i.nrIpv4 <> ''))
             """)
     long countMissingFromCmdb();
 
@@ -63,7 +61,7 @@ public interface InventoryRepository extends JpaRepository<Inventory, String> {
     @Query("""
             SELECT i FROM Inventory i
             WHERE i.sources LIKE '%cmdb%'
-              AND (i.vsphereIpv4 IS NOT NULL OR i.nrIpv4 IS NOT NULL)
+              AND ((i.vsphereIpv4 IS NOT NULL AND i.vsphereIpv4 <> '') OR (i.nrIpv4 IS NOT NULL AND i.nrIpv4 <> ''))
               AND (:search IS NULL OR LOWER(i.hostname) LIKE LOWER(CONCAT('%', :search, '%')))
             """)
     List<Inventory> findCandidatesForIpDiscrepancy(@Param("search") String search);

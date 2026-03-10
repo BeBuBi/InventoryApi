@@ -26,11 +26,9 @@ public class ReportController {
     @GetMapping("/missing-from-cmdb")
     public ResponseEntity<PagedResponse<InventoryResponse>> missingFromCmdb(
             @RequestParam(required = false) String search,
-            @RequestParam(required = false) String powerState,
-            @RequestParam(required = false) String sources,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size) {
-        return ResponseEntity.ok(inventoryService.listMissingFromCmdb(search, powerState, sources, page, size));
+        return ResponseEntity.ok(inventoryService.listMissingFromCmdb(search, page, size));
     }
 
     @GetMapping("/missing-from-cmdb/count")

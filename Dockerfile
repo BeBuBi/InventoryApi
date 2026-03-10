@@ -10,6 +10,7 @@ WORKDIR /app
 
 # Copy Gradle wrapper and dependency descriptors first (layer cache)
 COPY gradlew .
+RUN chmod +x gradlew
 COPY gradle/ gradle/
 COPY build.gradle settings.gradle ./
 

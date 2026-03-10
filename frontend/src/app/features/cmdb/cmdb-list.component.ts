@@ -33,9 +33,20 @@ interface CmdbDisplayRow extends CmdbRecord {
         <h1 class="text-2xl font-bold text-gray-800">CMDB Assets</h1>
       </div>
 
-      <!-- Toolbar: record count left, column picker right -->
+      <!-- Toolbar: record count + export + column picker -->
       <div class="bg-white rounded-lg shadow px-4 py-3 mb-4 flex items-center justify-between">
         <span class="text-sm text-gray-500">{{ totalElements }} records</span>
+
+        <div class="flex items-center gap-2">
+          <!-- Export CSV button -->
+          <button (click)="exportCsv()"
+                  class="flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded text-sm text-gray-600 hover:bg-gray-50 focus:outline-none">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+            </svg>
+            Export CSV
+          </button>
 
         <!-- Column picker button -->
         <div class="relative">
@@ -82,6 +93,7 @@ interface CmdbDisplayRow extends CmdbRecord {
             </div>
           </div>
         </div>
+        </div><!-- end right-side flex -->
       </div>
 
       <!-- Table -->
@@ -313,6 +325,42 @@ export class CmdbListComponent implements OnInit {
 
   trackByColKey(_index: number, col: ColumnDef): string {
     return col.key;
+  }
+
+  exportCsv(): void {
+    this.cmdbService.list({
+      search: this.search,
+      opStatuses: this.filterOpStatuses,
+      osVersions: this.filterOsVersions,
+      page: 0,
+      size: 10000
+    }).subscribe(res => {
+      const headers = this.columns.map(c => c.label);
+      const rows = [
+        headers.join(','),
+        ...res.content.map(asset => {
+          const d = this.toDisplayRow(asset);
+          return this.columns.map(c => {
+            let v: string;
+            switch (c.key) {
+              case 'operationalStatus': v = d._operationalStatusLabel; break;
+              case 'lastSyncedAt':      v = d._lastSyncedAtFormatted; break;
+              case 'createdAt':         v = d._createdAtFormatted; break;
+              case 'updatedAt':         v = d._updatedAtFormatted; break;
+              default:                  v = String(asset[c.key] ?? '');
+            }
+            return `"${v.replace(/"/g, '""')}"`;
+          }).join(',');
+        })
+      ];
+      const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `cmdb-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
   }
 
   // Bound method passed to app-multi-select [labelFn] for the op-status dropdown so

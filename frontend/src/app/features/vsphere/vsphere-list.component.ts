@@ -37,9 +37,20 @@ const POWER_STATE_OPTIONS = ['poweredOn', 'poweredOff', 'suspended'];
         <h1 class="text-2xl font-bold text-gray-800">vSphere VMs</h1>
       </div>
 
-      <!-- Toolbar: record count + column picker -->
+      <!-- Toolbar: record count + export + column picker -->
       <div class="bg-white rounded-lg shadow px-4 py-3 mb-4 flex items-center justify-between">
         <span class="text-sm text-gray-500">{{ totalElements }} records</span>
+
+        <div class="flex items-center gap-2">
+          <!-- Export CSV button -->
+          <button (click)="exportCsv()"
+                  class="flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded text-sm text-gray-600 hover:bg-gray-50 focus:outline-none">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+            </svg>
+            Export CSV
+          </button>
 
         <!-- Column picker button -->
         <div class="relative">
@@ -86,6 +97,7 @@ const POWER_STATE_OPTIONS = ['poweredOn', 'poweredOff', 'suspended'];
             </div>
           </div>
         </div>
+        </div><!-- end right-side flex -->
       </div>
 
       <!-- Table -->
@@ -375,6 +387,44 @@ export class VsphereListComponent implements OnInit {
       return a.localeCompare(b);
     });
     return parts.join(', ');
+  }
+
+  exportCsv(): void {
+    this.vsphereService.list({
+      search: this.search,
+      powerStates: this.filterPowerStates,
+      sourceUrls: this.filterSourceUrls,
+      guestOsTypes: this.filterGuestOsTypes,
+      page: 0,
+      size: 10000
+    }).subscribe(res => {
+      const headers = this.columns.map(c => c.label);
+      const rows = [
+        headers.join(','),
+        ...res.content.map(vm => {
+          const d = this.toDisplayRow(vm);
+          return this.columns.map(c => {
+            let v: string;
+            switch (c.key) {
+              case 'ipv4Address':  v = d._ipv4Sorted; break;
+              case 'ipv6Address':  v = d._ipv6Sorted; break;
+              case 'lastSyncedAt': v = d._lastSyncedAtFormatted; break;
+              case 'createdAt':    v = d._createdAtFormatted; break;
+              case 'updatedAt':    v = d._updatedAtFormatted; break;
+              default:             v = String(vm[c.key] ?? '');
+            }
+            return `"${v.replace(/"/g, '""')}"`;
+          }).join(',');
+        })
+      ];
+      const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `vsphere-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
   }
 
   private powerStateClass(state?: string): string {

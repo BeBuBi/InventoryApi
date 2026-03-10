@@ -39,9 +39,20 @@ const IP_COLS      = new Set<keyof NewRelicRecord>(['ipv4Address', 'ipv6Address'
         <h1 class="text-2xl font-bold text-gray-800">New Relic Hosts</h1>
       </div>
 
-      <!-- Toolbar: record count + column picker -->
+      <!-- Toolbar: record count + export + column picker -->
       <div class="bg-white rounded-lg shadow px-4 py-3 mb-4 flex items-center justify-between">
         <span class="text-sm text-gray-500">{{ totalElements }} records</span>
+
+        <div class="flex items-center gap-2">
+          <!-- Export CSV button -->
+          <button (click)="exportCsv()"
+                  class="flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded text-sm text-gray-600 hover:bg-gray-50 focus:outline-none">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+            </svg>
+            Export CSV
+          </button>
 
         <!-- Column picker button -->
         <div class="relative">
@@ -88,7 +99,7 @@ const IP_COLS      = new Set<keyof NewRelicRecord>(['ipv4Address', 'ipv6Address'
             </div>
           </div>
         </div>
-
+        </div><!-- end right-side flex -->
       </div>
 
       <!-- Table -->
@@ -310,6 +321,43 @@ export class NewRelicListComponent implements OnInit {
     ordered.forEach((col, i) => { col.visible = this.defaultColumns[i].visible; });
     this.columns = ordered;
     this.refreshVisibleColumns();
+  }
+
+  exportCsv(): void {
+    this.newRelicService.list({
+      search: this.search,
+      accountIds: this.filterAccountIds,
+      linuxDistros: this.filterLinuxDistros,
+      page: 0,
+      size: 10000
+    }).subscribe(res => {
+      const headers = this.columns.map(c => c.label);
+      const rows = [
+        headers.join(','),
+        ...res.content.map(host => {
+          const d = this.toDisplayRow(host);
+          return this.columns.map(c => {
+            let v: string;
+            switch (c.key) {
+              case 'ipv4Address':       v = d._ipv4Sorted; break;
+              case 'ipv6Address':       v = d._ipv6Sorted; break;
+              case 'systemMemoryBytes': v = d._memoryFormatted; break;
+              case 'createdAt':         v = d._createdAtFormatted; break;
+              case 'updatedAt':         v = d._updatedAtFormatted; break;
+              default:                  v = String(host[c.key] ?? '');
+            }
+            return `"${v.replace(/"/g, '""')}"`;
+          }).join(',');
+        })
+      ];
+      const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `newrelic-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
   }
 
   // O(1) Set lookups — replaces per-cell method calls in [class.*] bindings.

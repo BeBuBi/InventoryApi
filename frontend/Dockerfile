@@ -4,7 +4,7 @@
 # ============================================================
 
 # ── Stage 1: Build ──────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM repo.corp.cox.com/cox-csi-docker/csi-nodejs-20:latest
 
 WORKDIR /app
 

@@ -21,24 +21,10 @@ RUN ./gradlew dependencies --no-daemon -q || true
 COPY src/ src/
 RUN ./gradlew bootJar --no-daemon -x test
 
-# ── Stage 2: Runtime ────────────────────────────────────────
-FROM repo.corp.cox.com/docker/nginx:1.29.6-alpine
+# ── Stage 2: Execution ──────────────────────────────────────────
+FROM repo.corp.cox.com/cox-csi-docker/csi-amazoncorretto-17:latest
 USER root
-
-WORKDIR /opt/cox
-# Create docker user for building images
-ENV USER=coxapp
-
-# Change docker container from running as root user using 'coxapp' user
-RUN addgroup "$USER" \
-    && adduser \
-    --disabled-password \
-    --gecos "" \
-    --home "$(pwd)" \
-    --ingroup "$USER" \
-    --no-create-home \
-    "$USER"
-
+RUN apk add --no-cache sqlite
 COPY --from=builder --chown=coxapp:coxapp /opt/cox/build/libs/*.jar app.jar
 
 # Entrypoint fixes /app/data ownership at runtime (handles volume-mount case)
@@ -57,7 +43,7 @@ EXPOSE 8080
 
 USER coxapp
 
-ENTRYPOINT ["docker-entrypoint.sh", "java", \
+ENTRYPOINT ["java", \
   "-XX:+UseContainerSupport", \
   "-XX:MaxRAMPercentage=75.0", \
   "-Djava.security.egd=file:/dev/./urandom", \

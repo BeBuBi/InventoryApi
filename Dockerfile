@@ -7,7 +7,7 @@
 FROM repo.corp.cox.com/cox-csi-docker/csi-amazoncorretto-17:latest AS builder
 
 WORKDIR /app
-
+COPY . /app
 # Copy Gradle wrapper and dependency descriptors first (layer cache)
 COPY gradlew .
 RUN chmod +x gradlew
@@ -22,7 +22,7 @@ COPY src/ src/
 RUN ./gradlew bootJar --no-daemon -x test
 
 # ── Stage 2: Runtime ────────────────────────────────────────
-FROM repo.corp.cox.com/cox-csi-docker/csi-amazoncorretto-17:latest
+FROM nginx:alpine
 
 WORKDIR /app
 

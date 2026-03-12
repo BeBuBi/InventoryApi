@@ -1,0 +1,18 @@
+# Normalize line endings to LF in the repo; check out as LF on all platforms
+* text=auto eol=lf
+
+# Shell scripts and Docker — always LF
+*.sh        text eol=lf
+gradlew     text eol=lf
+Dockerfile  text eol=lf
+
+# Windows batch files — keep CRLF
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+
+# Binary files — no conversion
+*.jar       binary
+*.db        binary
+*.png       binary
+*.jpg       binary
+*.ico       binary

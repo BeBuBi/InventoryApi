@@ -4,7 +4,7 @@
 # ============================================================
 
 # ── Stage 1: Build ──────────────────────────────────────────
-FROM repo.corp.cox.com/cox-csi-docker/csi-nodejs-20:latest
+FROM repo.corp.cox.com/cox-csi-docker/csi-nodejs-20:latest AS builder
 
 WORKDIR /app
 

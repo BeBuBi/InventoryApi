@@ -4,7 +4,7 @@
 # ============================================================
 
 # ── Stage 1: Build ──────────────────────────────────────────
-FROM repo.corp.cox.com/cox-csi-docker/csi-amazoncorretto-17:latest
+FROM repo.corp.cox.com/cox-csi-docker/csi-amazoncorretto-17:latest AS builder
 
 WORKDIR /app
 
@@ -22,7 +22,7 @@ COPY src/ src/
 RUN ./gradlew bootJar --no-daemon -x test
 
 # ── Stage 2: Runtime ────────────────────────────────────────
-FROM eclipse-temurin:17-jre-alpine
+FROM repo.corp.cox.com/cox-csi-docker/csi-amazoncorretto-17:latest
 
 WORKDIR /app
 

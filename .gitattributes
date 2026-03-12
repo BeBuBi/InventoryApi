@@ -2,9 +2,10 @@
 * text=auto eol=lf
 
 # Shell scripts and Docker — always LF
-*.sh        text eol=lf
-gradlew     text eol=lf
-Dockerfile  text eol=lf
+*.sh                  text eol=lf
+gradlew               text eol=lf
+Dockerfile            text eol=lf
+docker-entrypoint.sh  text eol=lf
 
 # Windows batch files — keep CRLF
 *.bat       text eol=crlf

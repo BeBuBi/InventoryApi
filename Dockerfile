@@ -26,18 +26,18 @@ FROM nginx:alpine
 
 WORKDIR /app
 
-# Install sqlite for DB inspection / debugging
-RUN apk add --no-cache sqlite
+# Install sqlite for DB inspection / debugging; su-exec for user-switching in entrypoint
+RUN apk add --no-cache sqlite su-exec
 
 # Create non-root user
 RUN addgroup -S coxapp && adduser -S coxapp -G coxapp
 
-# Create data and logs directories owned by app user
-RUN mkdir -p data logs && chown -R coxapp:coxapp /app
-
 COPY --from=builder --chown=coxapp:coxapp /app/build/libs/*.jar app.jar
 
-USER coxapp
+# Entrypoint fixes /app/data ownership at runtime (handles volume-mount case)
+# then drops privileges to coxapp before starting Java.
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # DB stored in /app/data (mount a volume here in production)
 ENV DB_PATH=/app/data/inventory.db
@@ -45,7 +45,7 @@ ENV APP_CORS_ALLOWED_ORIGINS=http://localhost:4200
 
 EXPOSE 8080
 
-ENTRYPOINT ["java", \
+ENTRYPOINT ["docker-entrypoint.sh", "java", \
   "-XX:+UseContainerSupport", \
   "-XX:MaxRAMPercentage=75.0", \
   "-Djava.security.egd=file:/dev/./urandom", \

@@ -23,10 +23,21 @@ RUN ./gradlew bootJar --no-daemon -x test
 
 # ── Stage 2: Runtime ────────────────────────────────────────
 FROM repo.corp.cox.com/docker/nginx:1.29.6-alpine
+USER root
 
 WORKDIR /opt/cox
+# Create docker user for building images
+ENV USER=coxapp
 
-# Install sqlite for DB inspection / debugging; su-exec for user-switching in entrypoint
+# Change docker container from running as root user using 'coxapp' user
+RUN addgroup "$USER" \
+    && adduser \
+    --disabled-password \
+    --gecos "" \
+    --home "$(pwd)" \
+    --ingroup "$USER" \
+    --no-create-home \
+    "$USER"
 
 COPY --from=builder --chown=coxapp:coxapp /opt/cox/build/libs/*.jar app.jar
 
@@ -35,11 +46,15 @@ COPY --from=builder --chown=coxapp:coxapp /opt/cox/build/libs/*.jar app.jar
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
+RUN mkdir -p /opt/cox/data /opt/cox/logs
+RUN chown -R coxapp:coxapp /opt/cox/data /opt/cox/logs
+
 # DB stored in /app/data (mount a volume here in production)
 ENV DB_PATH=/opt/cox/data/inventory.db
 ENV APP_CORS_ALLOWED_ORIGINS=http://localhost:4200
 
 EXPOSE 8080
+
 USER coxapp
 
 ENTRYPOINT ["docker-entrypoint.sh", "java", \

@@ -32,11 +32,11 @@ COPY --from=builder --chown=coxapp:coxapp /opt/cox/build/libs/*.jar app.jar
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-RUN mkdir -p /opt/cox/data /opt/cox/logs
-RUN chown -R coxapp:coxapp /opt/cox/data /opt/cox/logs
+RUN mkdir -p /app/data /app/logs
+RUN chown -R coxapp:coxapp /app/data /app/logs
 
 # DB stored in /app/data (mount a volume here in production)
-ENV DB_PATH=/opt/cox/data/inventory.db
+ENV DB_PATH=/app/data/inventory.db
 ENV APP_CORS_ALLOWED_ORIGINS=http://localhost:4200
 
 EXPOSE 8080

@@ -4,10 +4,10 @@
 # ============================================================
 
 # ── Stage 1: Build ──────────────────────────────────────────
-FROM repo.corp.cox.com/cox-csi-docker/csi-amazoncorretto-17:latest AS builder
+FROM repo.corp.cox.com/cox-csi-docker/csi-amazoncorretto-21:latest AS builder
 USER root
-WORKDIR /opt/cox
-COPY . /opt/cox
+WORKDIR /opt/app/cox
+COPY . /opt/app/cox
 # Copy Gradle wrapper and dependency descriptors first (layer cache)
 COPY gradlew .
 RUN chmod +x gradlew
@@ -22,21 +22,17 @@ COPY src/ src/
 RUN ./gradlew bootJar --no-daemon -x test
 
 # ── Stage 2: Execution ──────────────────────────────────────────
-FROM repo.corp.cox.com/cox-csi-docker/csi-amazoncorretto-17:latest
+FROM repo.corp.cox.com/cox-csi-docker/csi-amazoncorretto-21:latest
 USER root
+WORKDIR /opt/app/cox
 RUN apk add --no-cache sqlite
-COPY --from=builder --chown=coxapp:coxapp /opt/cox/build/libs/*.jar app.jar
+COPY --from=builder --chown=coxapp:coxapp /opt/app/cox/build/libs/*.jar /opt/app/cox/app.jar
 
-# Entrypoint fixes /app/data ownership at runtime (handles volume-mount case)
-# then drops privileges to coxapp before starting Java.
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+RUN mkdir -p /opt/app/cox/data /opt/app/cox/logs
+RUN chown -R coxapp:coxapp /opt/app/cox /opt/app/cox/data /opt/app/cox/logs
 
-RUN mkdir -p /app/data /app/logs
-RUN chown -R coxapp:coxapp /app/data /app/logs
-
-# DB stored in /app/data (mount a volume here in production)
-ENV DB_PATH=/app/data/inventory.db
+# DB stored in /opt/app/cox/data (mount a volume here in production)
+ENV DB_PATH=/opt/app/cox/data/inventory.db
 ENV APP_CORS_ALLOWED_ORIGINS=http://localhost:4200
 
 EXPOSE 8080

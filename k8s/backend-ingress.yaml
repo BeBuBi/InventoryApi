@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: inventorytool-v2-backend
+  namespace: inventorytracker-api-dev
+  labels:
+    app: inventorytool-v2
+    component: backend
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: inventorytool-v2-api-dev.ccm-gke-ddtc-riselab-np-b.p3-np.cox.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: inventorytool-v2-backend
+                port:
+                  number: 8080

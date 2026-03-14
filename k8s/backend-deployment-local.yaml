@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventorytool-v2-backend
+  namespace: inventorytracker-api-dev
+  labels:
+    app: inventorytool-v2-backend
+    component: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inventorytool-v2-backend
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: inventorytool-v2-backend
+        component: backend
+    spec:
+      initContainers:
+        - name: fix-pvc-perms
+          image: busybox
+          command: ["sh", "-c", "chown -R 1000:1000 /opt/app/cox/data"]
+          volumeMounts:
+            - name: db-storage
+              mountPath: /opt/app/cox/data
+
+      securityContext:
+        runAsUser: 1000        # coxapp
+        runAsGroup: 1000       # coxapp
+        fsGroup: 1000          # make volume group-owned by 1000
+        fsGroupChangePolicy: "OnRootMismatch"  # avoids full recursive chown
+
+      containers:
+        - name: backend
+          image: backend:latest
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: DB_PATH
+              value:  /opt/app/cox/data/inventory.db
+            - name: APP_CORS_ALLOWED_ORIGINS
+              value: http://localhost:4200
+          volumeMounts:
+            - name: db-storage
+              mountPath:  /opt/app/cox/data
+            - name: logs-storage
+              mountPath:  /opt/app/cox/logs
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+      volumes:
+        - name: db-storage
+          persistentVolumeClaim:
+            claimName: oss-inventory-database-dev-pvc
+        - name: logs-storage
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventorytool-v2-backend
+  namespace: inventorytracker-api-dev
+  labels:
+    app: inventorytool-v2-backend
+    component: backend
+spec:
+  type: ClusterIP
+  selector:
+    app: inventorytool-v2-backend
+    component: backend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
